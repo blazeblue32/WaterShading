@@ -132,7 +132,7 @@ namespace WaterShading
         public static string RewriteRenderPerf(string text, bool withAtmosphere)
         {
             if (!RpLitMultiply.IsMatch(text)) return text;
-            bool atmosphere = withAtmosphere && RpLastInclude.IsMatch(text);
+            bool atmosphere = withAtmosphere && Settings.RenderPerfDebug == 0 && RpLastInclude.IsMatch(text);
             string floor = F(Settings.ShadowFloor), marker = F(WaterMarking.Marker - 1f);
             string block =
                 "$1\r\n" +
