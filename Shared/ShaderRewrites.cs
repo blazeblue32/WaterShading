@@ -13,6 +13,10 @@ namespace WaterShading
         // Set by the shader mirror before it is built: true when the game's atmosphere include has the shape this plugin expects, and the plugin can feed it.
         public static bool AtmosphereReady;
 
+        // The game's atmosphere include as rewritten for Render Performance's shader (constants in slot 6, no clip/discard), made from the player's own installation
+        // in memory and pasted into that shader's text when it is compiled. Null: include it by name instead.
+        public static string RenderPerfAtmosphereText;
+
         // Where the particle shader's own includes end; the atmosphere include goes right after them.
         static readonly Regex FrameInclude = new Regex(@"(#[ \t]*include[ \t]*<Frame\.hlsli>)", RegexOptions.Compiled);
 
@@ -163,7 +167,13 @@ namespace WaterShading
                 "    }\r\n" +
                 "#endif";
             string result = RpLitMultiply.Replace(text, block, 1);
-            if (atmosphere) result = RpLastInclude.Replace(result, "$1\r\n#include <Transparent/Atmosphere/AtmosphereCommon.hlsli>", 1);
+            if (atmosphere)
+            {
+                string inline = RenderPerfAtmosphereText;
+                result = inline != null
+                    ? RpLastInclude.Replace(result, m => m.Value + "\r\n" + inline + "\r\n", 1)
+                    : RpLastInclude.Replace(result, "$1\r\n#include <Transparent/Atmosphere/AtmosphereCommon.hlsli>", 1);
+            }
             return result;
         }
 

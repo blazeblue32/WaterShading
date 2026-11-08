@@ -6,7 +6,7 @@
   <FriendlyName>Water Shading</FriendlyName>
   <Author>BlazeBlue32</Author>
   <Tooltip>Makes the Water Mod's sea take sun shadows and the planet's atmospheric haze into account.</Tooltip>
-  <Description>Companion to the Water Mod (Steam Workshop 2200451495). The mod draws the sea as particles, which the game neither shadows nor covers with the planet's atmosphere: mountain and ship shadows never fall on the water, and the sea looks pasted over the haze. This plugin tags the sea's particles by material, makes the particle shader read the sun shadow map for each of their pixels, and adds the planet's atmospheric haze to them as the game does for terrain.</Description>
+  <Description>Companion to the Water Mod (Steam Workshop 2200451495). The mod draws the sea as particles, which the game neither shadows nor covers with the planet's atmosphere: mountain and ship shadows never fall on the water, and the sea looks pasted over the haze. This plugin tags the sea's particles by material, makes the particle shader read the sun shadow map for each of their pixels, and adds the planet's atmospheric haze to them as the game does for terrain. The first ten to fifteen seconds in a world may stutter for the first launch or two while the graphics layer builds the changed shaders; it settles on later launches.</Description>
   <SourceDirectories>
     <Directory>ClientPlugin</Directory>
     <Directory>Shared</Directory>

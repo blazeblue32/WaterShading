@@ -42,7 +42,7 @@ namespace WaterShading
         static ConstructorInfo stringIdCtor;
         static PropertyInfo stringIdText;
 
-        [ThreadStatic] static bool inPreprocess, inCompile, ourRewrite;
+        [ThreadStatic] static bool ourRewrite;
         [ThreadStatic] static IntPtr rewrittenSource;
 
         // Called every frame for a while after start: the other plugin may load after this one.
@@ -66,7 +66,6 @@ namespace WaterShading
             MethodInfo gather = AccessTools.Method(renderer, "Gather");
             reload = AccessTools.Method(renderer, "ReloadShaders");
             compile = compiler == null ? null : AccessTools.Method(compiler, "CompileBytecodeInternal");
-            MethodInfo open = includeHandlerType == null ? null : AccessTools.Method(includeHandlerType, "Open");
             Type bytecode = Log.FindType("SharpDX.D3DCompiler.ShaderBytecode");
             MethodInfo preprocess = bytecode == null ? null : bytecode.GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .FirstOrDefault(m => m.Name == "Preprocess" && m.GetParameters().Length == 5 && m.GetParameters()[0].ParameterType == typeof(string) && m.GetParameters()[3].ParameterType.IsByRef);
@@ -77,7 +76,7 @@ namespace WaterShading
             string missing = string.Join(", ", new[]
             {
                 add == null ? "particle intake" : null, bind == null ? "resource binding" : null, gather == null ? "frame gather" : null,
-                reload == null || !reload.IsStatic ? "shader reload" : null, compile == null ? "shader compile" : null, open == null ? "include reader" : null,
+                reload == null || !reload.IsStatic ? "shader reload" : null, compile == null ? "shader compile" : null, includeHandlerType == null ? "include handler" : null,
                 preprocess == null ? "preprocessor" : null, sharpCompile == null ? "native compile call" : null, tagReady ? null : "particle layout", PixelBindings.ResolveStage() ? null : "pixel stage"
             }.Where(n => n != null).ToArray());
             if (missing.Length > 0)
@@ -94,10 +93,9 @@ namespace WaterShading
             harmony.Patch(add, prefix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(AddPrefix)));
             harmony.Patch(bind, postfix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(BindPostfix)));
             harmony.Patch(gather, prefix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(GatherPrefix)));
-            harmony.Patch(preprocess, prefix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(PreprocessPrefix)), finalizer: new HarmonyMethod(typeof(RenderPerfCompat), nameof(PreprocessFinalizer)));
+            harmony.Patch(preprocess, prefix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(PreprocessPrefix)));
             // First in line: on Linux the compatibility layer patches this same call and would otherwise take the original text first.
             harmony.Patch(sharpCompile, prefix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(CompilePrefix)) { priority = Priority.First }, finalizer: new HarmonyMethod(typeof(RenderPerfCompat), nameof(CompileSourceFinalizer)));
-            harmony.Patch(open, postfix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(OpenPostfix)));
             harmony.Patch(compile, finalizer: new HarmonyMethod(typeof(RenderPerfCompat), nameof(CompileFinalizer)));
             installed = true;
             Log.Write("Render Performance found; its particle shader will be changed the first time it draws particles (atmosphere " + (atmosphereReady ? "on" : "off") + ")");
@@ -111,7 +109,11 @@ namespace WaterShading
                 string include = Path.Combine(Log.ShadersPath(), "Transparent", "Atmosphere", ShaderRewrites.AtmosphereFile);
                 if (!File.Exists(include)) return false;
                 string original = File.ReadAllText(include);
-                bool ready = ShaderRewrites.RewriteAtmosphere(original, AtmosphereSlot) != original;
+                string rewritten = ShaderRewrites.RewriteAtmosphere(original, AtmosphereSlot);
+                bool ready = rewritten != original;
+                // The text goes straight into Render Performance's shader (see ShaderRewrites.RewriteRenderPerf): on Linux the native compiler reads
+                // includes itself and never asks the include handler, so an include rewritten on the way in would never be seen.
+                ShaderRewrites.RenderPerfAtmosphereText = ready ? rewritten : null;
                 if (!ready) Log.Write("atmosphere: the game's atmosphere include cannot be used in Render Performance's shader; its sea gets no atmosphere");
                 return ready;
             }
@@ -242,11 +244,8 @@ namespace WaterShading
                 return;
             }
             __0 = patched;
-            inPreprocess = true;
             ourRewrite = true;
         }
-
-        public static void PreprocessFinalizer() { inPreprocess = false; }
 
         // The call that really compiles: Render Performance hands its ORIGINAL text to the compiler here (with its own include handler), arguments by position:
         // 0 = pointer to the text, 1 = its size in bytes, 7 = the include handler. The text is replaced by the rewritten one for the length of the call.
@@ -266,30 +265,12 @@ namespace WaterShading
             while (Marshal.ReadByte(pointer, size) != 0) size++;
             rewrittenSource = pointer;
             __0 = pointer; __1 = size;
-            inCompile = true;
             ourRewrite = true;
         }
 
         public static void CompileSourceFinalizer()
         {
-            inCompile = false;
             if (rewrittenSource != IntPtr.Zero) { Marshal.FreeHGlobal(rewrittenSource); rewrittenSource = IntPtr.Zero; }
-        }
-
-        // The atmosphere include is read through Render Performance's own include handler; while its particle shader is being preprocessed the include is rewritten
-        // (and its constants moved to a slot Render Performance does not use). Arguments by position: 1 = the file name; the result is the stream.
-        public static void OpenPostfix(string __1, ref Stream __result)
-        {
-            if (!(inPreprocess || inCompile) || !atmosphereReady || __result == null || __1 == null || !__1.EndsWith(ShaderRewrites.AtmosphereFile, StringComparison.OrdinalIgnoreCase)) return;
-            try
-            {
-                string text;
-                using (var reader = new StreamReader(__result, new UTF8Encoding(false), true)) text = reader.ReadToEnd();
-                string patched = ShaderRewrites.RewriteAtmosphere(text, AtmosphereSlot);
-                if (patched == text) Log.Write("WARNING: nothing to rewrite in the atmosphere include (Render Performance); the game has changed");
-                __result = new MemoryStream(new UTF8Encoding(false).GetBytes(patched), false);
-            }
-            catch (Exception e) { Log.Write("failed to rewrite the atmosphere include for Render Performance: " + e.Message); }
         }
 
         // The safety net: if the changed particle shader does not compile (or Render Performance's compile throws on it), compile the original text instead, so

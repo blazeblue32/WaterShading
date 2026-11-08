@@ -7,7 +7,7 @@ using HarmonyLib;
 namespace WaterShading
 {
     // The sea's particles get the same atmospheric in-scatter the game adds to terrain. The shader side (ShaderRewrites) calls the game's own atmosphere
-    // function; this side gives that function what it reads in the particle pixel stage: the planet's atmosphere constants (constant buffer 1) and the density
+    // function; this side gives that function what it reads in the particle pixel stage: the planet's atmosphere constants (constant buffer 1, or the slot given for Render Performance) and the density
     // lookup texture (texture slot 5). Both are worked out by the game's own code for the nearest planet; the plugin only calls it and uploads the result.
     public static class AtmosphereBinding
     {
@@ -20,7 +20,8 @@ namespace WaterShading
         static MethodInfo fill, nearest, mapDiscard, write, unmap, setConstantBuffer;
         static Type constantsType;
         static FieldInfo radiusField, intensityField;
-        static bool broken, reportedNone;
+        static bool broken, reportedNone, triedOwn;
+        static object ownBuffer;
         static object lastId;
 
         // Looks up everything the game provides; false (atmosphere off, shadows unaffected) when anything is missing.
@@ -82,8 +83,31 @@ namespace WaterShading
             return false;
         }
 
+        // The game's atmosphere pass maps its own constant buffer again whenever it draws a planet, and Render Performance draws the sea on other contexts and threads,
+        // so the sea gets a constant buffer of its own, made the way the game makes its one (same size, same usage). If that cannot be done the game's is used.
+        static object OwnBuffer()
+        {
+            if (ownBuffer != null || triedOwn) return ownBuffer;
+            triedOwn = true;
+            try
+            {
+                Type managers = Log.FindType("VRage.Render11.Common.MyManagers");
+                object buffers = managers == null ? null : AccessTools.Field(managers, "Buffers")?.GetValue(null);
+                MethodInfo create = buffers == null ? null : buffers.GetType().GetMethod("CreateConstantBuffer");
+                if (create == null) { Log.Write("atmosphere: the game's buffer factory was not found; sharing the game's atmosphere constant buffer"); return null; }
+                var p = create.GetParameters();
+                if (p.Length != 5 || p[0].ParameterType != typeof(string) || p[1].ParameterType != typeof(int) || !p[3].ParameterType.IsEnum || p[4].ParameterType != typeof(bool))
+                { Log.Write("atmosphere: the game's buffer factory has a different shape; sharing the game's atmosphere constant buffer"); return null; }
+                int size = System.Runtime.InteropServices.Marshal.SizeOf(constantsType);
+                ownBuffer = create.Invoke(buffers, new object[] { "WaterShadingAtmosphere", size, Activator.CreateInstance(p[2].ParameterType), Enum.ToObject(p[3].ParameterType, 2), true });
+                if (ownBuffer != null) Log.Write("atmosphere: using a constant buffer of its own (" + size + " bytes)");
+            }
+            catch (Exception e) { ownBuffer = null; Log.Write("atmosphere: could not make a constant buffer of its own, sharing the game's: " + (e.InnerException ?? e).Message); }
+            return ownBuffer;
+        }
+
         // Called on the render thread each time the particle renderer binds its resources: works out the constants for the nearest planet,
-        // uploads them into the game's own atmosphere constant buffer (the game maps it again before every use of its own), and binds it
+        // uploads them into a constant buffer of the plugin's own (the game's one is mapped again by its own atmosphere pass), and binds it
         // and the density lookup for the particle pixel stage. ps is the pixel stage, setSrv its texture-binding method.
         public static void Bind(object context, object ps, MethodInfo setSrv, int constantsSlot = ConstantsSlot)
         {
@@ -91,7 +115,7 @@ namespace WaterShading
             try
             {
                 object camera = cameraPosition.GetValue(matrices.GetValue(environment.GetValue(null)));
-                object buffer = constantsBuffer.GetValue(null);
+                object buffer = OwnBuffer() ?? constantsBuffer.GetValue(null);
                 if (camera == null || buffer == null) return;
 
                 object id = nearest.Invoke(null, new object[] { camera });

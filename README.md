@@ -19,11 +19,17 @@ As on terrain, nothing is added closer than 1000 m. Settings: `Atmosphere`, `Atm
 ## Render Performance
 The Render Performance plugin replaces the game's particle renderer with its own, which draws with its own shader. When it is installed this plugin also works there,
 by reaching into it by name (nothing of it is copied or edited on disk): the sea's particles are marked as they enter its renderer (in the particle's alpha-cutout value, which
-it does not use for the sea), its particle shader's text is swapped for a changed copy at the moment it is compiled (the same change as for the game's shader; the atmosphere constants
-move to constant buffer slot 6 because it uses slot 1 itself), its resource binding gets the shadow map and the atmosphere constants, and once it is asked to rebuild its shaders.
+it does not use for the sea), its particle shader's text is swapped for a changed copy at the moment it is compiled (the same change as for the game's shader, with the game's atmosphere code,
+made from your own install, pasted in and its constants moved to constant buffer slot 6 because Render Performance uses slot 1 itself), its resource binding gets the shadow map and the
+atmosphere constants, and once it is asked to rebuild its shaders. The atmosphere code is pasted into the text rather than included by name because on Linux the compiler reads include files itself.
 It is built so this plugin cannot break Render Performance: every piece it relies on is checked when it is installed; if something is missing or looks different, or the changed
 shader does not compile, Render Performance is given its own shader back, the log gets a `WARNING` line and a notification appears on the HUD
 ("Water Shading: ... the sea gets no shadows or haze while it is on"). If Render Performance changes in a way that breaks this, the sea simply looks as before. Turn it off with `RenderPerf=0`.
+
+## Known limits
+- The sea is drawn as two layers (a clear top and a darker one below), and a shadow can show on both, so it can look doubled.
+- Nothing is added to the sea closer than 1000 m, as on terrain.
+- The stock Windows path has not been run on Windows.
 
 ## Which particles count as sea
 The plugin tags a particle as sea by its material: the name contains `water` or `foam`, or the name is one of the textures the Water Mod itself offers
@@ -45,7 +51,9 @@ Only the player's own view changes, so every player who wants the effect needs t
 
 A line starting `WARNING`, or saying "the game has changed", "not found" or "failed", means a game update moved something the plugin relies on. The plugin then switches the affected part off:
 a problem with the atmosphere leaves the shadows working, a problem with the shadows switches the plugin off, and if that happens after the particle shaders were rebuilt it hands them back to the game's own.
-The first start with the plugin recompiles the particle shaders (a short, one-time delay).
+The particle shaders are recompiled when the first particles are drawn after joining a world: expect a pause of about two seconds then.
+For the first launch or two after installing or updating the plugin (or after a game update), the first ten to fifteen seconds in a world can also stutter: the graphics layer builds its
+own copies of the changed shaders as they first appear on screen, and keeps them for later launches. It settles by itself over the next launch or two.
 
 ## Settings
 `<user data>/Storage/WaterShading/WaterShading.cfg` is created on first start. Restart the game after changing it.
@@ -75,8 +83,8 @@ Which one is used is decided at start: a Linux compatibility compiler present me
 - Reads the game's shader folder. On the Linux compatibility layer it writes the shader mirror under `<user data>/Storage/WaterShading/`; the settings file is written there on every setup.
 - On stock Windows it also patches the game's shader preprocessing and its include reader (see Platforms).
 - Patches two renderer methods: one adds the shadow map and its sampler (and the atmosphere constants and density lookup) to the particle pixel stage, one tags the sea's particles as they are batched.
-- Writes the nearest planet's atmosphere constants, worked out by the game's own routine, into the game's own atmosphere constant buffer once per particle draw; the game fills that buffer again before each of its own uses.
-- When Render Performance is installed it also patches six of its methods and SharpDX's preprocessor (only for Render Performance's own shader compile); see above.
+- Writes the nearest planet's atmosphere constants, worked out by the game's own routine, into a constant buffer of its own (made with the game's own buffer factory) once per particle draw. If that buffer cannot be made, the game's atmosphere constant buffer is used instead.
+- When Render Performance is installed it also patches four of its methods and two SharpDX calls, the preprocessor and the native compile call (the last two only for Render Performance's own shader compile); see above.
 - Reads the Water Mod's list of sea textures from its loaded script (read only, optional).
 - No network access, no processes started, no game files changed.
 - Rebuilds the game's particle pixel shaders once, on the first frame that draws particles.
