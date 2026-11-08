@@ -5,8 +5,8 @@
   <RepoId>blazeblue32/WaterShading</RepoId>
   <FriendlyName>Water Shading</FriendlyName>
   <Author>BlazeBlue32</Author>
-  <Tooltip>Makes the Water Mod's sea surface take terrain and grid shadows into account.</Tooltip>
-  <Description>Companion to the Water Mod. The sea surface is drawn as particles that the game does not shadow, so mountain and ship shadows never fall on the water. This plugin tags the sea's and foam's particles by material and makes the game's particle shader read the sun shadow map for each of their pixels. On Linux it works with the LinuxCompat plugin, using a local copy of the shader folder made from your own install. The game log shows lines starting with [WaterShading].</Description>
+  <Tooltip>Makes the Water Mod's sea take sun shadows and the planet's atmospheric haze into account (Linux with LinuxCompat only).</Tooltip>
+  <Description>Companion to the Water Mod (Steam Workshop 2200451495). The mod draws the sea as particles, which the game neither shadows nor covers with the planet's atmosphere: mountain and ship shadows never fall on the water, and the sea looks pasted over the haze. This plugin tags the sea's particles by material, makes the particle shader read the sun shadow map for each of their pixels, and adds the planet's atmospheric haze to them as the game does for terrain. Client side only; every player who wants the effect needs it. Linux only for now: it works with the LinuxCompat plugin, using a local copy of the shader folder made from your own install (nothing from the game is stored in the plugin); on other setups it does nothing. It has no effect with the Render Performance plugin's particle renderer. Settings are in the user data Storage/WaterShading/WaterShading.cfg. The game log shows lines starting with [WaterShading].</Description>
   <SourceDirectories>
     <Directory>ClientPlugin</Directory>
     <Directory>Shared</Directory>

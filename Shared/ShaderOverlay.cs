@@ -45,13 +45,16 @@ namespace WaterShading
         // Arguments by position: 0 = shader file, 5 = shader folder.
         public static void CompilePrefix(ref string __0, ref string __5) { Redirect(ref __0, ref __5); }
 
+        // Set to stop redirecting (used to hand the particle shaders back to the game if the plugin cannot finish its job).
+        public static volatile bool Disabled;
+
         static bool reported, reportedMiss;
 
         static void Redirect(ref string file, ref string root)
         {
             try
             {
-                if (file == null || root == null || mirrorRoot == null) return;
+                if (Disabled || file == null || root == null || mirrorRoot == null) return;
                 string f = Normalize(file);
                 if (!ShaderRewrites.IsBillboardShader(f) || !f.StartsWith(gameRoot + "/", StringComparison.OrdinalIgnoreCase))
                 {

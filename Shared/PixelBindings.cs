@@ -60,9 +60,11 @@ namespace WaterShading
                     RebuildPixelShaders();
                     if (broken) return;
                 }
+                object map = shadowMap();
+                if (map == null) return; // being recreated this instant: keep what is bound from the last call
                 object ps = getPixelShader.Invoke(__0, null);
                 setSampler.Invoke(ps, new object[] { ShadowSamplerSlot, samplerState });
-                setSrv.Invoke(ps, new object[] { ShadowMapSlot, shadowMap() });
+                setSrv.Invoke(ps, new object[] { ShadowMapSlot, map });
                 if (!reportedBound) { reportedBound = true; Log.Write("shadow map bound for the billboard pixel stage"); }
                 if (ShaderRewrites.AtmosphereReady) AtmosphereBinding.Bind(__0, ps, setSrv);
             }
@@ -70,13 +72,23 @@ namespace WaterShading
             {
                 broken = true;
                 Log.Write("binding the shadow map failed, shadows on water are off: " + e);
+                GiveShadersBack();
             }
+        }
+
+        // If the plugin cannot keep its side of the bargain after the particle shaders were rebuilt (the shadow map is no longer bound), those shaders would
+        // read an empty shadow map and draw the sea as if fully shadowed. So the redirect is switched off and the shaders are built again, from the game's own files.
+        static void GiveShadersBack()
+        {
+            if (!regenerated) return;
+            ShaderOverlay.Disabled = true;
+            RebuildPixelShaders("giving the billboard pixel shaders back to the game");
         }
 
         // The renderer keeps each pixel shader under a key (file + macros) and hands back the existing one when asked again.
         // So: forget the billboard shaders' keys, then ask the renderer to build its billboard shaders again; this time they are compiled
         // (through the redirect) instead of coming from the game's precompiled cache. The old shader objects stay allocated but unused.
-        static void RebuildPixelShaders()
+        static void RebuildPixelShaders(string purpose = "so they pass through the redirect")
         {
             try
             {
@@ -94,7 +106,7 @@ namespace WaterShading
                         if (string.Equals(fileField.GetValue(entry.Key)?.ToString(), BillboardShader, StringComparison.OrdinalIgnoreCase)) stale.Add(entry.Key);
                     foreach (object key in stale) { table.Remove(key); removed++; }
                 }
-                Log.Write("building " + removed + " billboard pixel shaders again so they pass through the redirect");
+                Log.Write("building " + removed + " billboard pixel shaders again " + purpose);
                 if (removed == 0) { Fail("no billboard pixel shaders were registered"); return; }
                 generatePixelShaders.Invoke(null, null);
                 Log.Write("billboard pixel shaders rebuilt");

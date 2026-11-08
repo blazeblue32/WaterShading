@@ -29,7 +29,9 @@ namespace ClientPlugin
         // The compatibility layer's assembly may load after this plugin, so look for it again for a short while.
         public void Update()
         {
-            if (!done && attempts < 600) Try();
+            if (done || attempts >= 600) return;
+            Try();
+            if (!done && attempts == 600) Log.Write("no Linux compatibility compiler found; the plugin does nothing on this setup");
         }
 
         void Try()

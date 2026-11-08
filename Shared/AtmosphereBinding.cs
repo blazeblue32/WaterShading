@@ -55,9 +55,9 @@ namespace WaterShading
                 write = generic == null ? null : generic.MakeGenericMethod(constantsType);
                 unmap = mapping.GetMethod("Unmap", instance);
 
-                string missing = Names(("m_atmospheres", atmospheres), ("AtmosphereLUT", luts), ("m_cb", constantsBuffer), ("FillAtmosphereConstants", fill), ("GetNearestAtmosphereId", nearest),
-                    ("MyRender11.Environment", environment), ("Matrices", matrices), ("CameraPosition", cameraPosition), ("Planet", planet), ("AtmosphereIntensityMultiplier", intensityMultiplier),
-                    ("TransmittanceLut", lutTexture), ("MapDiscard", mapDiscard), ("WriteAndPosition", write), ("Unmap", unmap), ("Intensity", intensityField));
+                string missing = Names("m_atmospheres", atmospheres, "AtmosphereLUT", luts, "m_cb", constantsBuffer, "FillAtmosphereConstants", fill, "GetNearestAtmosphereId", nearest,
+                    "MyRender11.Environment", environment, "Matrices", matrices, "CameraPosition", cameraPosition, "Planet", planet, "AtmosphereIntensityMultiplier", intensityMultiplier,
+                    "TransmittanceLut", lutTexture, "MapDiscard", mapDiscard, "WriteAndPosition", write, "Unmap", unmap, "Intensity", intensityField);
                 if (missing.Length > 0) return Missing(missing);
                 Available = true;
                 return true;
@@ -65,9 +65,13 @@ namespace WaterShading
             catch (Exception e) { return Missing("lookup failed: " + e.Message); }
         }
 
-        static string Names(params (string name, object value)[] items)
+        // The names (given as name, value, name, value ...) whose value is missing.
+        static string Names(params object[] pairs)
         {
-            return string.Join(", ", items.Where(i => i.value == null).Select(i => i.name));
+            var missing = new System.Collections.Generic.List<string>();
+            for (int i = 0; i + 1 < pairs.Length; i += 2)
+                if (pairs[i + 1] == null) missing.Add((string)pairs[i]);
+            return string.Join(", ", missing.ToArray());
         }
 
         static bool Missing(string what)

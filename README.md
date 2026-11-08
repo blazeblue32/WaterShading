@@ -1,11 +1,12 @@
 # Water Shading
 
-Companion plugin for the Water Mod (Steam Workshop 2200451495). The mod draws the sea as particles, and the game does not apply
-the sun's shadows to those, so shadows from mountains, buildings or ships never fall on the water. This plugin makes the game read the
-sun shadow map for each pixel of the sea and foam and darken shadowed water.
+Companion plugin for the Water Mod (Steam Workshop 2200451495). The mod draws the sea as particles, and the game applies neither the sun's shadows
+nor the planet's atmosphere to those: shadows from mountains, buildings or ships never fall on the water, and the sea looks pasted over the haze.
+This plugin makes the game read the sun shadow map for each pixel of the sea and foam and darken shadowed water, and adds the planet's atmospheric haze to it.
 
 **Status: shadows and atmosphere work on Linux with the LinuxCompat plugin, Render Performance off.**
-Not yet supported: the Render Performance plugin (it replaces the game's particle renderer), and Windows.
+Not supported: Windows (the plugin does nothing there), and the Render Performance plugin (it replaces the game's particle renderer with its own, so this plugin's changes have no effect while it is on).
+It only changes particles of water materials, so there is nothing to see in worlds without the Water Mod (the shader rebuild and the bindings still happen).
 
 ## Atmosphere
 The game adds the planet's atmospheric haze to terrain with a screen pass that reads the depth of what is behind each pixel. The sea's particles write no depth, so
@@ -29,8 +30,10 @@ Only the player's own view changes, so every player who wants the effect needs t
     [WaterShading] building 63 billboard pixel shaders again ... / billboard pixel shaders rebuilt     (once the first particles are drawn)
     [WaterShading] shadow map bound for the billboard pixel stage
     [WaterShading] particle material treated as sea: <name>
+    [WaterShading] atmosphere: planet <id> bound (atmosphere radius ..., intensity ..., lookup found)
 
-A line starting `WARNING` or saying "the game has changed" means a game update moved something the plugin relies on; it then leaves the water as the game draws it.
+A line starting `WARNING`, or saying "the game has changed", "not found" or "failed", means a game update moved something the plugin relies on. The plugin then switches the affected part off:
+a problem with the atmosphere leaves the shadows working, a problem with the shadows switches the plugin off, and if that happens after the particle shaders were rebuilt it hands them back to the game's own.
 The first start with the plugin recompiles the particle shaders (a short, one-time delay).
 
 ## Settings
@@ -54,7 +57,10 @@ Windows support is not done yet.
 
 ## What it touches
 - Reads the game's shader folder and writes under `<user data>/Storage/WaterShading/`.
-- Patches two renderer methods: one adds two resource bindings for the particle pixel stage, one tags the sea's particles as they are batched.
+- Patches two renderer methods: one adds the shadow map and its sampler (and the atmosphere constants and density lookup) to the particle pixel stage, one tags the sea's particles as they are batched.
+- Writes the nearest planet's atmosphere constants, worked out by the game's own routine, into the game's own atmosphere constant buffer once per particle draw; the game fills that buffer again before each of its own uses.
+- Reads the Water Mod's list of sea textures from its loaded script (read only, optional).
+- No network access, no processes started, no game files changed.
 - Rebuilds the game's particle pixel shaders once, on the first frame that draws particles.
 
 ## Build
@@ -64,3 +70,8 @@ You need the .NET 10 SDK and a Space Engineers install. `Directory.Build.props` 
     dotnet build ClientPlugin/ClientPlugin.csproj
 
 To load it in Pulsar, add the repository folder as a local plugin source (the descriptor is `WaterShading.xml`).
+
+## Cost
+Per frame the plugin adds on the order of 0.1 ms of CPU. On the GPU the shadow lookup is one sample per sea pixel, and the atmosphere is the game's own function (4 steps by default) per sea pixel,
+only beyond 1000 m, for each of the sea's layers. Far sea in view costs the most; `Atmosphere=0` or `AtmosphereSteps=2` lowers it.
+The first particle frame of a session pauses for about 2 seconds while the particle shaders are rebuilt.
