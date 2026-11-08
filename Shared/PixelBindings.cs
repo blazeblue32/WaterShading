@@ -39,7 +39,7 @@ namespace WaterShading
             generatePixelShaders = AccessTools.Method(renderer, "GeneratePS");
             if (generatePixelShaders == null) { Log.Write("billboard shader builder not found; the game has changed, shadows cannot be drawn"); return false; }
 
-            if (Settings.Diagnostics) Diagnostics.Install(harmony, renderer);
+            if (Settings.Atmosphere) AtmosphereBinding.Resolve();
             if (!WaterMarking.Apply(harmony, renderer)) return false;
             harmony.Patch(bind, postfix: new HarmonyMethod(typeof(PixelBindings), nameof(Postfix)));
             return true;
@@ -59,13 +59,12 @@ namespace WaterShading
                     regenerated = true;
                     RebuildPixelShaders();
                     if (broken) return;
-                    if (Settings.Diagnostics) Diagnostics.AfterRebuild();
                 }
-                if (Settings.Diagnostics) Diagnostics.Tick();
                 object ps = getPixelShader.Invoke(__0, null);
                 setSampler.Invoke(ps, new object[] { ShadowSamplerSlot, samplerState });
                 setSrv.Invoke(ps, new object[] { ShadowMapSlot, shadowMap() });
                 if (!reportedBound) { reportedBound = true; Log.Write("shadow map bound for the billboard pixel stage"); }
+                if (ShaderRewrites.AtmosphereReady) AtmosphereBinding.Bind(__0, ps, setSrv);
             }
             catch (Exception e)
             {

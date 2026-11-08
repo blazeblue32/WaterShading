@@ -122,7 +122,7 @@ namespace WaterShading
             }
             catch { }
             if (found != null && !ReferenceEquals(found, modTextures))
-                Log.Write("Water Mod texture list found (" + found.Count + " entries): " + string.Join(", ", found));
+                Log.Write("Water Mod texture list found (" + found.Count + " entries)");
             modTextures = found;
             return modTextures;
         }

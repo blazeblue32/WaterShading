@@ -9,7 +9,7 @@
     <Import_RootNamespace>WaterShading</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="$(MSBuildThisFileDirectory)Diagnostics.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AtmosphereBinding.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Log.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PixelBindings.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Settings.cs" />

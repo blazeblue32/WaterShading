@@ -53,7 +53,7 @@ namespace WaterShading
             {
                 if (file == null || root == null || mirrorRoot == null) return;
                 string f = Normalize(file);
-                if (!ShaderRewrites.Wants(f) || !f.StartsWith(gameRoot + "/", StringComparison.OrdinalIgnoreCase))
+                if (!ShaderRewrites.IsBillboardShader(f) || !f.StartsWith(gameRoot + "/", StringComparison.OrdinalIgnoreCase))
                 {
                     if (f.IndexOf("illboard", StringComparison.OrdinalIgnoreCase) >= 0 && !reportedMiss) { reportedMiss = true; Log.Write("billboard shader seen but not redirected: " + file + " (root " + root + ")"); }
                     return;
@@ -77,7 +77,18 @@ namespace WaterShading
             {
                 string mirror = Path.Combine(Settings.Folder, "Shaders");
                 int links = 0, copies = 0;
-                bool rewritten = false;
+                bool rewrittenBillboard = false;
+
+                // Atmosphere for the sea needs the game's atmosphere include in a usable shape; check before anything is written.
+                string atmosphereInclude = Path.Combine(source, "Transparent", "Atmosphere", ShaderRewrites.AtmosphereFile);
+                ShaderRewrites.AtmosphereReady = false;
+                if (Settings.Atmosphere && AtmosphereBinding.Available && File.Exists(atmosphereInclude))
+                {
+                    string original = File.ReadAllText(atmosphereInclude);
+                    ShaderRewrites.AtmosphereReady = ShaderRewrites.RewriteAtmosphere(original) != original;
+                    if (!ShaderRewrites.AtmosphereReady) Log.Write("atmosphere: the game's atmosphere include has changed shape; the sea gets no atmosphere");
+                }
+                else if (Settings.Atmosphere) Log.Write("atmosphere: not available (" + (AtmosphereBinding.Available ? "include not found" : "game classes not found") + "); the sea gets no atmosphere");
                 foreach (string dir in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories).Prepend(source))
                     Directory.CreateDirectory(Path.Combine(mirror, Relative(source, dir)));
 
@@ -88,12 +99,12 @@ namespace WaterShading
                     if (ShaderRewrites.Wants(rel))
                     {
                         string text = File.ReadAllText(file);
-                        string patched = ShaderRewrites.Rewrite(text);
+                        string patched = ShaderRewrites.Rewrite(rel, text);
                         if (patched == text) { Log.Write("WARNING: the pattern to rewrite in " + rel + " was not found; the game has changed. Water is left as the game draws it."); return null; }
+                        if (ShaderRewrites.IsBillboardShader(rel)) rewrittenBillboard = true;
                         DeleteIfExists(target);
                         File.WriteAllText(target, patched, new UTF8Encoding(false));
                         copies++;
-                        rewritten = true;
                         continue;
                     }
                     if (IsLinkTo(target, file)) continue;
@@ -101,7 +112,7 @@ namespace WaterShading
                     if (TryLink(target, file)) links++;
                     else { File.Copy(file, target, true); copies++; }
                 }
-                if (!rewritten) { Log.Write("WARNING: the billboard shader was not found in " + source); return null; }
+                if (!rewrittenBillboard) { Log.Write("WARNING: the billboard shader was not found in " + source); return null; }
                 Log.Write("shader mirror ready (" + links + " new links, " + copies + " copies)");
                 return Normalize(mirror);
             }

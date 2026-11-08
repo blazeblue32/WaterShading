@@ -4,8 +4,16 @@ Companion plugin for the Water Mod (Steam Workshop 2200451495). The mod draws th
 the sun's shadows to those, so shadows from mountains, buildings or ships never fall on the water. This plugin makes the game read the
 sun shadow map for each pixel of the sea and foam and darken shadowed water.
 
-**Status: shadows work on Linux with the LinuxCompat plugin, Render Performance off.** Atmosphere (water showing through thick air) is planned as a second step.
+**Status: shadows and atmosphere work on Linux with the LinuxCompat plugin, Render Performance off.**
 Not yet supported: the Render Performance plugin (it replaces the game's particle renderer), and Windows.
+
+## Atmosphere
+The game adds the planet's atmospheric haze to terrain with a screen pass that reads the depth of what is behind each pixel. The sea's particles write no depth, so
+the haze behind them is covered by the water colour and the sea looks pasted over the atmosphere. The plugin makes the game's own atmosphere function run for each
+sea pixel (the ray from the camera to that point) and adds the result to the sea's colour, scaled by the particle's alpha. The function comes from your own install:
+the plugin turns the three statements that would delete a particle (a distance clip and two discards) into early returns in the local shader copy. The game's own
+code works out the planet's atmosphere constants for the nearest planet; the plugin uploads them and the density lookup texture for the particle pixel stage.
+As on terrain, nothing is added closer than 1000 m. Settings: `Atmosphere`, `AtmosphereStrength`, `AtmosphereSteps`, `AtmosphereDebug` (below).
 
 ## Which particles count as sea
 The plugin tags a particle as sea by its material: the name contains `water` or `foam`, or the name is one of the textures the Water Mod itself offers
@@ -32,8 +40,11 @@ The first start with the plugin recompiles the particle shaders (a short, one-ti
 |---|---|---|
 | `ShadowFloor` | `0.30` | Brightness of water fully in shadow compared with sunlit water (0 = black, 1 = no effect) |
 | `ExtraMaterials` | empty | Comma separated particle material names to treat as sea, for water textures the rules above miss |
+| `Atmosphere` | `1` | The sea gets the planet's atmospheric haze like terrain does |
+| `AtmosphereStrength` | `1` | Multiplier on the sea's haze (1 = as strong as on terrain) |
+| `AtmosphereSteps` | `4` | Integration steps along the view ray, 1 to 8 (the game uses 4 on high quality, 2 on medium) |
+| `AtmosphereDebug` | `0` | To find problems: `1` shows only the atmosphere term on the sea (magenta where the planet constants did not arrive, yellow where the atmosphere function returned nothing); `2` paints the sea red under 1000 m and green over |
 | `DebugColors` | `0` | `1` paints the sea green where the shadow lookup says lit and red where it says shadowed |
-| `Diagnostics` | `0` | `1` writes extra detail about the particle renderer to the game log |
 
 ## Platforms
 Linux with the LinuxCompat plugin only for now: LinuxCompat compiles shaders with a native compiler that reads the shader folder itself, so the plugin
