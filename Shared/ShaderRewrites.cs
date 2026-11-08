@@ -78,13 +78,15 @@ namespace WaterShading
             return result;
         }
 
-        public static string Rewrite(string fileName, string text, bool withAtmosphere = true)
+        public static string Rewrite(string fileName, string text, bool withAtmosphere = true, string inlineAtmosphere = null)
         {
-            return NameIs(fileName, AtmosphereFile) ? RewriteAtmosphere(text) : Rewrite(text, withAtmosphere);
+            return NameIs(fileName, AtmosphereFile) ? RewriteAtmosphere(text) : Rewrite(text, withAtmosphere, inlineAtmosphere);
         }
 
         // Returns the rewritten text; the text itself when the pattern is missing (the caller logs that and uses the original).
-        public static string Rewrite(string text, bool withAtmosphere = true)
+        // inlineAtmosphere: the (already rewritten) atmosphere include as text, pasted into the shader instead of included by name; used where the include cannot be rewritten
+        // on its way in. It also adds a constant, so the preprocessed text (the game's shader cache key) differs from any text built the older way.
+        public static string Rewrite(string text, bool withAtmosphere = true, string inlineAtmosphere = null)
         {
             if (!LitMultiply.IsMatch(text)) return text;
 
@@ -119,7 +121,10 @@ namespace WaterShading
                 "#endif";
 
             string result = LitMultiply.Replace(text, block, 1);
-            if (atmosphere) result = FrameInclude.Replace(result, "$1\r\n#include <Transparent/Atmosphere/AtmosphereCommon.hlsli>", 1);
+            if (atmosphere)
+                result = inlineAtmosphere != null
+                    ? FrameInclude.Replace(result, m => m.Value + "\r\n" + inlineAtmosphere + "\r\nstatic const float WaterShadingTextVersion = 2.0f;\r\n", 1)
+                    : FrameInclude.Replace(result, "$1\r\n#include <Transparent/Atmosphere/AtmosphereCommon.hlsli>", 1);
             return result;
         }
 

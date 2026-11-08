@@ -18,8 +18,8 @@ namespace WaterShading
 
         public static Type FindType(string fullName)
         {
-            return AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(fullName, false)).FirstOrDefault(t => t != null)
-                   ?? HarmonyLib.AccessTools.TypeByName(fullName);
+            // Not AccessTools.TypeByName: it builds an array of every type in the process on each miss, and the names asked for here are full names.
+            return AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(fullName, false)).FirstOrDefault(t => t != null);
         }
 
         // The folder the game itself compiles shaders from (its compiler class exposes it), falling back to the content folder's shader directory.
@@ -31,10 +31,11 @@ namespace WaterShading
             return !string.IsNullOrEmpty(path) ? path : System.IO.Path.Combine(VRage.FileSystem.MyFileSystem.ShadersBasePath, "Shaders");
         }
 
+        // <user data>/Storage, or null when the game's user data folder is not known (then nothing is written: the plugin runs on its defaults and the shader mirror is not made).
         public static string StorageRoot()
         {
             try { return System.IO.Path.Combine(VRage.FileSystem.MyFileSystem.UserDataPath, "Storage"); }
-            catch { return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpaceEngineers", "Storage"); }
+            catch (Exception e) { Write("the game's user data folder is not available (" + e.Message + "); settings and the shader mirror are not used"); return null; }
         }
     }
 }

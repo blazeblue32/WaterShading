@@ -28,7 +28,7 @@ namespace WaterShading
         const string CompilerType = "Prism.Common.FileShaderCompiler";
         const string IncludeHandlerType = "Prism.Common.FileShaderCompiler+FileIncludeHandler";
 
-        static int polls;
+        static int polls, assembliesSeen;
         static bool installed, gaveUp, reloaded, atmosphereReady, reportedShape, reportedWorking, tagBroken, reportedTagged;
         static int taggedNow, taggedCount, framesSinceReload, compileOkCount, compileFailCount;
         static readonly System.Collections.Generic.Dictionary<string, int> compiledByEntry = new System.Collections.Generic.Dictionary<string, int>();
@@ -51,6 +51,9 @@ namespace WaterShading
             if (installed || gaveUp || !Settings.RenderPerf) return;
             if (++polls > 1800) { gaveUp = true; return; }
             if (polls % 10 != 1) return; // looking through every loaded assembly is not free: every tenth frame is plenty
+            int loaded = AppDomain.CurrentDomain.GetAssemblies().Length;
+            if (loaded == assembliesSeen) return; // nothing new has been loaded since the last look
+            assembliesSeen = loaded;
             Type renderer = Log.FindType(RendererType);
             if (renderer == null) return;
             try { Install(harmony, renderer); }
@@ -298,7 +301,7 @@ namespace WaterShading
         }
 
         // null when the compile result is fine, otherwise the reason.
-        static string ResultFailure(object result)
+        public static string ResultFailure(object result)
         {
             try
             {

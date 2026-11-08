@@ -4,7 +4,7 @@ Companion plugin for the Water Mod (Steam Workshop 2200451495). The mod draws th
 nor the planet's atmosphere to those: shadows from mountains, buildings or ships never fall on the water, and the sea looks pasted over the haze.
 This plugin makes the game read the sun shadow map for each pixel of the sea and foam and darken shadowed water, and adds the planet's atmospheric haze to it.
 
-**Status: shadows and atmosphere work on Linux with the LinuxCompat plugin (tested, with and without Render Performance). Stock Windows, and the game under Wine, use a second way of changing the shader that is written and checked against stand-ins but has not been run on Windows.**
+**Status: shadows and atmosphere work on Linux with the LinuxCompat plugin (tested, with and without Render Performance). Stock Windows, and the game under Wine, use a second way of changing the shader that is written and checked against stand-ins and a real compile of the changed shader, but has not been run on Windows.**
 Works with the Render Performance plugin too (see below); tested in game on Linux.
 It only changes particles of water materials, so there is nothing to see in worlds without the Water Mod (the shader rebuild and the bindings still happen).
 
@@ -46,7 +46,7 @@ Only the player's own view changes, so every player who wants the effect needs t
 
     [WaterShading] shader mirror ready (...)                                        (Linux only)
     [WaterShading] installed (Linux compatibility layer); shadow floor 0.3          (or "installed (game's own compiler)" on stock Windows)
-    [WaterShading] billboard shader compile redirected to the mirror               (or "billboard shader preprocessed by the plugin" on stock Windows)
+    [WaterShading] billboard shader compile redirected to the mirror               (or "billboard shader preprocessed by the plugin" and "billboard shader compiled from the changed text" on stock Windows)
     [WaterShading] building 63 billboard pixel shaders again ... / billboard pixel shaders rebuilt     (once the first particles are drawn)
     [WaterShading] shadow map bound for the billboard pixel stage
     [WaterShading] particle material treated as sea: <name>
@@ -80,13 +80,13 @@ The shader change has to get into the game's shader compile, and that differs by
 | Setup | How |
 |---|---|
 | Linux with the LinuxCompat plugin (tested) | LinuxCompat compiles shaders with a native compiler that reads the shader folder itself, so the plugin makes a local mirror of your own shader folder under `<user data>/Storage/WaterShading/Shaders` (links to your original files plus two rewritten copies) and points only the particle shader compiles at it. It relies on LinuxCompat's class and method names; if they change the plugin logs that and does nothing. |
-| Stock Windows, or the game under Wine (not yet run on Windows) | The game's own compiler reads the files. Its preprocessing step reads the top-level particle shader straight from disk, so for that one shader the plugin runs the step itself on a rewritten copy of the text, using the game's own preprocessor and include handler. The atmosphere include, which the game's include handler reads, is rewritten as it is read, but only while the particle shader is being preprocessed, so the game's own atmosphere shaders keep reading the original. If the rewrite did not take, the particle shader is built without atmosphere instead of risking missing sea pixels. Nothing is written to disk. |
+| Stock Windows, or the game under Wine (not yet run on Windows) | The game's own compiler reads the files. Its compile reads the particle shader from disk, preprocesses it only to work out the shader cache key, and then compiles the original text, so the plugin changes both steps for that one shader: the preprocessing step runs on a rewritten copy of the text (so the cache key is the changed shader's), and SharpDX's native compile call is given the rewritten copy in place of the original. The game's atmosphere code, with its clip and discards turned into early returns, is pasted into that text instead of being included by name, so the game's own atmosphere shaders keep reading the original file. If the changed shader does not compile, the original is compiled instead, the change is switched off, and a warning is logged and shown on the HUD. Nothing is written to disk. |
 
 Which one is used is decided at start: a Linux compatibility compiler present means the first; Windows (or Wine) means the second; Linux without the compatibility compiler means the plugin does nothing.
 
 ## What it touches
 - Reads the game's shader folder. On the Linux compatibility layer it writes the shader mirror under `<user data>/Storage/WaterShading/`; the settings file is written there on every setup.
-- On stock Windows it also patches the game's shader preprocessing and its include reader (see Platforms).
+- On stock Windows it also patches the game's shader preprocessing and SharpDX's preprocessor and native compile call (only for the particle shader; see Platforms).
 - Patches two renderer methods: one adds the shadow map and its sampler (and the atmosphere constants and density lookup) to the particle pixel stage, one tags the sea's particles as they are batched.
 - Writes the nearest planet's atmosphere constants, worked out by the game's own routine, into a constant buffer of its own (made with the game's own buffer factory) once per particle draw. If that buffer cannot be made, the game's atmosphere constant buffer is used instead.
 - When Render Performance is installed it also patches four of its methods and two SharpDX calls, the preprocessor and the native compile call (the last two only for Render Performance's own shader compile); see above.

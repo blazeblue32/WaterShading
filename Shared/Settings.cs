@@ -37,16 +37,19 @@ namespace WaterShading
         // 2 = show the distance the shader sees (red under 1000 m, green over).
         public static int AtmosphereDebug = 0;
 
-        public static string Folder { get { return Path.Combine(Log.StorageRoot(), "WaterShading"); } }
+        // null when the game's user data folder is not known.
+        public static string Folder { get { string root = Log.StorageRoot(); return root == null ? null : Path.Combine(root, "WaterShading"); } }
 
         public static void Load()
         {
             try
             {
-                string path = Path.Combine(Folder, "WaterShading.cfg");
+                string folder = Folder;
+                if (folder == null) return;
+                string path = Path.Combine(folder, "WaterShading.cfg");
                 if (!File.Exists(path))
                 {
-                    Directory.CreateDirectory(Folder);
+                    Directory.CreateDirectory(folder);
                     File.WriteAllText(path,
                         "# Water Shading settings. Restart the game after changing.\n" +
                         "# ShadowFloor: brightness of water fully in shadow compared with sunlit water (0 black .. 1 no shadow effect).\n" +

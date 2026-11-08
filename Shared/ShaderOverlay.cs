@@ -78,7 +78,9 @@ namespace WaterShading
         {
             try
             {
-                string mirror = Path.Combine(Settings.Folder, "Shaders");
+                string folder = Settings.Folder;
+                if (folder == null) { Log.Write("no place to make the shader mirror; the sea is left as the game draws it"); return null; }
+                string mirror = Path.Combine(folder, "Shaders");
                 int links = 0, copies = 0;
                 bool rewrittenBillboard = false;
 
