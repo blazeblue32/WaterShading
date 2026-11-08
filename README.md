@@ -4,8 +4,8 @@ Companion plugin for the Water Mod (Steam Workshop 2200451495). The mod draws th
 nor the planet's atmosphere to those: shadows from mountains, buildings or ships never fall on the water, and the sea looks pasted over the haze.
 This plugin makes the game read the sun shadow map for each pixel of the sea and foam and darken shadowed water, and adds the planet's atmospheric haze to it.
 
-**Status: shadows and atmosphere work on Linux with the LinuxCompat plugin (tested, Render Performance off). Stock Windows, and the game under Wine, use a second way of changing the shader that is written and checked against stand-ins but has not been run on Windows.**
-Works with the Render Performance plugin too (see below); that part is checked against stand-ins and a real compile of its shader, and still needs a game test.
+**Status: shadows and atmosphere work on Linux with the LinuxCompat plugin (tested, with and without Render Performance). Stock Windows, and the game under Wine, use a second way of changing the shader that is written and checked against stand-ins but has not been run on Windows.**
+Works with the Render Performance plugin too (see below); tested in game on Linux.
 It only changes particles of water materials, so there is nothing to see in worlds without the Water Mod (the shader rebuild and the bindings still happen).
 
 ## Atmosphere
