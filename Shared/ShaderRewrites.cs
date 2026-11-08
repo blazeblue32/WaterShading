@@ -25,6 +25,23 @@ namespace WaterShading
         // Unlit particles (the sea) skip that, so the shadow step goes right after it.
         static readonly Regex LitMultiply = new Regex(@"(#[ \t]*ifdef[ \t]+LIT_PARTICLE[ \t]*\r?\n[ \t]*resultColor\.xyz[ \t]*\*=[ \t]*vertex\.light[ \t]*;[ \t]*\r?\n[ \t]*#[ \t]*endif)", RegexOptions.Compiled);
 
+        // Decides whether the sea can get atmosphere: wanted, the game's classes found, and the game's atmosphere include has the shape RewriteAtmosphere expects.
+        // shadersRoot is the game's shader folder. Logs why not, once.
+        public static void CheckAtmosphere(string shadersRoot)
+        {
+            AtmosphereReady = false;
+            if (!Settings.Atmosphere) return;
+            string include = System.IO.Path.Combine(shadersRoot, "Transparent", "Atmosphere", AtmosphereFile);
+            if (!AtmosphereBinding.Available || !System.IO.File.Exists(include))
+            {
+                Log.Write("atmosphere: not available (" + (AtmosphereBinding.Available ? "include not found" : "game classes not found") + "); the sea gets no atmosphere");
+                return;
+            }
+            string original = System.IO.File.ReadAllText(include);
+            AtmosphereReady = RewriteAtmosphere(original) != original;
+            if (!AtmosphereReady) Log.Write("atmosphere: the game's atmosphere include has changed shape; the sea gets no atmosphere");
+        }
+
         // Files the shader mirror carries as rewritten copies: the particle shader, and (when usable) the atmosphere include it pulls in.
         public static bool Wants(string fileName)
         {
@@ -52,19 +69,19 @@ namespace WaterShading
             return AtmosphereDiscard.Replace(result, none);
         }
 
-        public static string Rewrite(string fileName, string text)
+        public static string Rewrite(string fileName, string text, bool withAtmosphere = true)
         {
-            return NameIs(fileName, AtmosphereFile) ? RewriteAtmosphere(text) : Rewrite(text);
+            return NameIs(fileName, AtmosphereFile) ? RewriteAtmosphere(text) : Rewrite(text, withAtmosphere);
         }
 
         // Returns the rewritten text; the text itself when the pattern is missing (the caller logs that and uses the original).
-        public static string Rewrite(string text)
+        public static string Rewrite(string text, bool withAtmosphere = true)
         {
             if (!LitMultiply.IsMatch(text)) return text;
 
             string floor = F(Settings.ShadowFloor);
             string marker = F(WaterMarking.Marker - 1f);
-            bool atmosphere = AtmosphereReady && FrameInclude.IsMatch(text);
+            bool atmosphere = withAtmosphere && AtmosphereReady && FrameInclude.IsMatch(text);
             string block =
                 "$1\r\n" +
                 "#ifndef LIT_PARTICLE\r\n" +
@@ -93,7 +110,7 @@ namespace WaterShading
                 "#endif";
 
             string result = LitMultiply.Replace(text, block, 1);
-            if (atmosphere) result = FrameInclude.Replace(result, "$1\r\n#include \"Atmosphere/AtmosphereCommon.hlsli\"", 1);
+            if (atmosphere) result = FrameInclude.Replace(result, "$1\r\n#include <Transparent/Atmosphere/AtmosphereCommon.hlsli>", 1);
             return result;
         }
 

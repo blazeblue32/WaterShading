@@ -82,6 +82,7 @@ namespace WaterShading
         {
             if (!regenerated) return;
             ShaderOverlay.Disabled = true;
+            ShaderHook.Disabled = true;
             RebuildPixelShaders("giving the billboard pixel shaders back to the game");
         }
 

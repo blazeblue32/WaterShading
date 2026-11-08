@@ -14,6 +14,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)PixelBindings.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Settings.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)WaterMarking.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ShaderHook.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ShaderOverlay.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ShaderRewrites.cs" />
   </ItemGroup>

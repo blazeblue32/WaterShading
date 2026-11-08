@@ -26,7 +26,7 @@ namespace ClientPlugin
             Try();
         }
 
-        // The compatibility layer's assembly may load after this plugin, so look for it again for a short while.
+        // On Linux the compatibility layer's assembly may load after this plugin, so look for it again for a short while.
         public void Update()
         {
             if (done || attempts >= 600) return;
@@ -37,10 +37,13 @@ namespace ClientPlugin
         void Try()
         {
             attempts++;
+            // Two ways in, depending on who compiles the shaders. With the Linux compatibility layer a native compiler reads the shader folder itself (ShaderOverlay);
+            // everywhere else (stock Windows, or the game under Wine) the game's own compiler does and is hooked directly (ShaderHook).
             Type compiler = ShaderOverlay.FindCompiler();
-            if (compiler == null)
+            bool unix = Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX;
+            if (compiler == null && unix)
             {
-                if (attempts == 1) Log.Write("no Linux compatibility compiler found yet (this plugin supports the Linux compatibility layer only for now); will keep looking briefly");
+                if (attempts == 1) Log.Write("no Linux compatibility compiler found yet; will keep looking briefly");
                 return;
             }
             string shaders;
@@ -48,14 +51,21 @@ namespace ClientPlugin
             catch (Exception) { return; } // paths not ready yet; try again on a later frame
             done = true;
             // The shader change and the binding go together: without the binding the shader would read an empty shadow map,
-            // so the binding is checked first and the shader is only redirected when it is in place.
-            if (PixelBindings.Apply(harmony) && ShaderOverlay.Apply(harmony, compiler, shaders))
+            // so the binding is checked first and the shader is only changed when it is in place.
+            try
             {
-                PixelBindings.Enabled = true;
-                Log.Write("installed; shadow floor " + Settings.ShadowFloor.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                bool shaderPart = false;
+                if (PixelBindings.Apply(harmony))
+                    shaderPart = compiler != null ? ShaderOverlay.Apply(harmony, compiler, shaders) : ShaderHook.Apply(harmony, shaders);
+                if (shaderPart)
+                {
+                    PixelBindings.Enabled = true;
+                    Log.Write("installed (" + (compiler != null ? "Linux compatibility layer" : "game's own compiler") + "); shadow floor " + Settings.ShadowFloor.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    return;
+                }
             }
-            else
-                Log.Write("not active (see the lines above)");
+            catch (Exception e) { Log.Write("failed to install: " + e); }
+            Log.Write("not active (see the lines above)");
         }
 
         public void Dispose()

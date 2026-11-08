@@ -83,15 +83,7 @@ namespace WaterShading
                 bool rewrittenBillboard = false;
 
                 // Atmosphere for the sea needs the game's atmosphere include in a usable shape; check before anything is written.
-                string atmosphereInclude = Path.Combine(source, "Transparent", "Atmosphere", ShaderRewrites.AtmosphereFile);
-                ShaderRewrites.AtmosphereReady = false;
-                if (Settings.Atmosphere && AtmosphereBinding.Available && File.Exists(atmosphereInclude))
-                {
-                    string original = File.ReadAllText(atmosphereInclude);
-                    ShaderRewrites.AtmosphereReady = ShaderRewrites.RewriteAtmosphere(original) != original;
-                    if (!ShaderRewrites.AtmosphereReady) Log.Write("atmosphere: the game's atmosphere include has changed shape; the sea gets no atmosphere");
-                }
-                else if (Settings.Atmosphere) Log.Write("atmosphere: not available (" + (AtmosphereBinding.Available ? "include not found" : "game classes not found") + "); the sea gets no atmosphere");
+                ShaderRewrites.CheckAtmosphere(source);
                 foreach (string dir in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories).Prepend(source))
                     Directory.CreateDirectory(Path.Combine(mirror, Relative(source, dir)));
 
