@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<PluginData xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
+  <!-- The ID of the plugin, never change this -->
+  <Id>b90210a0-0138-415c-8af6-5ce1cede7350</Id>
+  <RepoId>blazeblue32/WaterShading</RepoId>
+  <FriendlyName>Water Shading</FriendlyName>
+  <Author>BlazeBlue32</Author>
+  <Tooltip>Makes the Water Mod's sea surface take terrain and grid shadows into account.</Tooltip>
+  <Description>Companion to the Water Mod. The sea surface is drawn as particles that the game does not shadow, so mountain and ship shadows never fall on the water. This plugin tags the sea's and foam's particles by material and makes the game's particle shader read the sun shadow map for each of their pixels. On Linux it works with the LinuxCompat plugin, using a local copy of the shader folder made from your own install. The game log shows lines starting with [WaterShading].</Description>
+  <SourceDirectories>
+    <Directory>ClientPlugin</Directory>
+    <Directory>Shared</Directory>
+  </SourceDirectories>
+  <Hidden>false</Hidden>
+  <!-- TODO: after pushing the repository, the full commit hash of the release goes here -->
+  <Commit>TODO Git commit hash</Commit>
+</PluginData>
