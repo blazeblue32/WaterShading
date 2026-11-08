@@ -136,12 +136,13 @@ namespace WaterShading
             string floor = F(Settings.ShadowFloor), marker = F(WaterMarking.Marker - 1f);
             string block =
                 "$1\r\n" +
+                (Settings.RenderPerfDebug == 1 ? "    color.xyz = lerp(color.xyz, float3(1, 0, 1), 0.4f);\r\n" : "") +
                 "#if !defined(LIT_PARTICLE)\r\n" +
                 "    // Water Shading: particles tagged as sea read the sun shadow map per pixel" + (atmosphere ? " and get the planet's haze" : "") + ".\r\n" +
                 "    if (input.AlphaCutout > " + marker + ")\r\n" +
                 "    {\r\n" +
                 "        float wsShadow = CalculateShadowFast(input.WorldPos);\r\n" +
-                (Settings.DebugColors
+                (Settings.DebugColors || Settings.RenderPerfDebug == 1
                     ? "        color = float4(lerp(float3(1, 0, 0), float3(0, 1, 0), wsShadow), 1.0f);\r\n"
                     : "        color.xyz *= lerp(" + floor + ", 1.0f, wsShadow);\r\n") +
                 (atmosphere

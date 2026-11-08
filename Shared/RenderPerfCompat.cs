@@ -27,11 +27,12 @@ namespace WaterShading
         const string IncludeHandlerType = "Prism.Common.FileShaderCompiler+FileIncludeHandler";
 
         static int polls;
-        static bool installed, gaveUp, reloaded, atmosphereReady, reportedShape, reportedWorking, tagBroken;
+        static bool installed, gaveUp, reloaded, atmosphereReady, reportedShape, reportedWorking, tagBroken, reportedTagged;
+        static int taggedNow, taggedCount, framesSinceReload;
         static volatile bool disabled;
         static Type includeHandlerType;
         static MethodInfo reload, compile;
-        static Action<object> tag;
+        static Func<object, bool> tag;
         static bool[] seaKnown = new bool[1024], isSea = new bool[1024];
         static ConstructorInfo stringIdCtor;
         static PropertyInfo stringIdText;
@@ -123,12 +124,17 @@ namespace WaterShading
 
             var input = Expression.Parameter(typeof(object), "b");
             var typed = Expression.Variable(billboard, "typed");
-            var body = Expression.Block(new[] { typed },
+            var marked = Expression.Variable(typeof(bool), "marked");
+            var body = Expression.Block(new[] { typed, marked },
                 Expression.Assign(typed, Expression.Convert(input, billboard)),
+                Expression.Assign(marked, Expression.Constant(false)),
                 Expression.IfThen(
                     Expression.Call(typeof(RenderPerfCompat).GetMethod(nameof(IsSeaId), BindingFlags.Static | BindingFlags.Public), Expression.Property(Expression.Field(typed, material), id)),
-                    Expression.Assign(Expression.Field(typed, cutout), Expression.Constant(WaterMarking.Marker))));
-            tag = Expression.Lambda<Action<object>>(body, input).Compile();
+                    Expression.Block(
+                        Expression.Assign(Expression.Field(typed, cutout), Expression.Constant(WaterMarking.Marker)),
+                        Expression.Assign(marked, Expression.Constant(true)))),
+                marked);
+            tag = Expression.Lambda<Func<object, bool>>(body, input).Compile();
             return true;
         }
 
@@ -153,7 +159,7 @@ namespace WaterShading
         public static void AddPrefix(object __0)
         {
             if (tag == null || tagBroken || disabled) return;
-            try { tag(__0); }
+            try { if (tag(__0)) taggedNow++; }
             catch (Exception e) { tagBroken = true; Log.Write("marking Render Performance's sea particles failed: " + e.Message); }
         }
 
@@ -163,6 +169,12 @@ namespace WaterShading
         // (it builds them when it starts, before this plugin can have changed anything).
         public static void GatherPrefix()
         {
+            if (reloaded && !reportedTagged && !disabled && ++framesSinceReload > 120)
+            {
+                reportedTagged = true;
+                Log.Write("Render Performance: " + taggedCount + " sea particles marked in the last frame" + (taggedCount == 0 ? " (none: the sea is not being drawn through Render Performance, or its particles are not recognised)" : ""));
+            }
+            taggedCount = taggedNow; taggedNow = 0;
             if (reloaded || disabled) return;
             reloaded = true;
             try { reload.Invoke(null, null); Log.Write("asked Render Performance to rebuild its particle shaders"); }

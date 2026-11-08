@@ -14,6 +14,10 @@ namespace WaterShading
         // Also work with the Render Performance plugin's particle renderer when it is installed.
         public static bool RenderPerf = true;
 
+        // To find problems with the Render Performance support: 1 = tint EVERY particle that Render Performance draws magenta (shows its shader was replaced)
+        // and paint the sea green where the shadow lookup says lit and red where shadowed.
+        public static int RenderPerfDebug = 0;
+
         // Extra particle material names (comma separated) to treat as sea. Names containing "water" or "foam" are always included.
         public static string ExtraMaterials = "";
 
@@ -49,6 +53,8 @@ namespace WaterShading
                         "ShadowFloor=" + ShadowFloor.ToString(CultureInfo.InvariantCulture) + "\n" +
                         "# RenderPerf: 1 = also work with the Render Performance plugin's particle renderer when it is installed, 0 = leave it alone.\n" +
                         "RenderPerf=1\n" +
+                        "# RenderPerfDebug (to find problems): 1 tints every particle Render Performance draws magenta (shows its shader was changed) and paints the sea green where lit, red where shadowed; 0 normal.\n" +
+                        "RenderPerfDebug=0\n" +
                         "# ExtraMaterials: comma separated particle material names to treat as sea (names containing water or foam are always included).\n" +
                         "ExtraMaterials=\n" +
                         "# DebugColors: 1 paints water green where the shadow lookup says lit and red where it says shadowed (to check it works), 0 normal.\n" +
@@ -83,6 +89,8 @@ namespace WaterShading
                         AtmosphereDebug = Math.Max(0, Math.Min(2, (int)f));
                     else if (key.Equals("RenderPerf", StringComparison.OrdinalIgnoreCase))
                         RenderPerf = !(value == "0" || value.Equals("false", StringComparison.OrdinalIgnoreCase));
+                    else if (key.Equals("RenderPerfDebug", StringComparison.OrdinalIgnoreCase) && float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out f))
+                        RenderPerfDebug = Math.Max(0, Math.Min(1, (int)f));
                     else if (key.Equals("ExtraMaterials", StringComparison.OrdinalIgnoreCase))
                         ExtraMaterials = value;
                     else if (key.Equals("DebugColors", StringComparison.OrdinalIgnoreCase))
