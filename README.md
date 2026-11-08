@@ -19,7 +19,7 @@ As on terrain, nothing is added closer than 1000 m. Settings: `Atmosphere`, `Atm
 ## Render Performance
 The Render Performance plugin replaces the game's particle renderer with its own, which draws with its own shader. When it is installed this plugin also works there,
 by reaching into it by name (nothing of it is copied or edited on disk): the sea's particles are marked as they enter its renderer (in the particle's alpha-cutout value, which
-it does not use for the sea), its particle shader's text is changed as its compiler preprocesses it (the same change as for the game's shader; the atmosphere constants
+it does not use for the sea), its particle shader's text is swapped for a changed copy at the moment it is compiled (the same change as for the game's shader; the atmosphere constants
 move to constant buffer slot 6 because it uses slot 1 itself), its resource binding gets the shadow map and the atmosphere constants, and once it is asked to rebuild its shaders.
 It is built so this plugin cannot break Render Performance: every piece it relies on is checked when it is installed; if something is missing or looks different, or the changed
 shader does not compile, Render Performance is given its own shader back, the log gets a `WARNING` line and a notification appears on the HUD
