@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using HarmonyLib;
 
@@ -14,7 +15,8 @@ namespace WaterShading
     // and that part is left alone, and if the changed shader fails to compile, Render Performance is given its own shader back, so it never breaks because of this.
     //
     //   tag    - its per-particle intake (BillboardRenderGroup.Add) gets the sea marker, carried in the particle's alpha-cutout value
-    //   shader - the text of its particle shader is changed as its compiler preprocesses it (the same rewrite idea as for the game's shader)
+    //   shader - the text of its particle shader is changed as its compiler hands it to the compiler (the same rewrite idea as for the game's shader). Its compile
+    //            step preprocesses the text only to make a cache key and compiles the ORIGINAL text, so the change has to go in at the compile call.
     //   bind   - its resource binding gets the shadow map and the atmosphere constants (in a slot of its own choosing: its own data uses slot 1)
     //   reload - once, its own shader reload is asked for so it recompiles with the change
     public static class RenderPerfCompat
@@ -28,7 +30,10 @@ namespace WaterShading
 
         static int polls;
         static bool installed, gaveUp, reloaded, atmosphereReady, reportedShape, reportedWorking, tagBroken, reportedTagged;
-        static int taggedNow, taggedCount, framesSinceReload;
+        static int taggedNow, taggedCount, framesSinceReload, compileOkCount, compileFailCount;
+        static readonly System.Collections.Generic.Dictionary<string, int> compiledByEntry = new System.Collections.Generic.Dictionary<string, int>();
+        static bool reportedAgain;
+        static FieldInfo pixelShaders;
         static volatile bool disabled;
         static Type includeHandlerType;
         static MethodInfo reload, compile;
@@ -37,7 +42,8 @@ namespace WaterShading
         static ConstructorInfo stringIdCtor;
         static PropertyInfo stringIdText;
 
-        [ThreadStatic] static bool inPreprocess, ourRewrite;
+        [ThreadStatic] static bool inPreprocess, inCompile, ourRewrite;
+        [ThreadStatic] static IntPtr rewrittenSource;
 
         // Called every frame for a while after start: the other plugin may load after this one.
         public static void Poll(Harmony harmony)
@@ -64,13 +70,15 @@ namespace WaterShading
             Type bytecode = Log.FindType("SharpDX.D3DCompiler.ShaderBytecode");
             MethodInfo preprocess = bytecode == null ? null : bytecode.GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .FirstOrDefault(m => m.Name == "Preprocess" && m.GetParameters().Length == 5 && m.GetParameters()[0].ParameterType == typeof(string) && m.GetParameters()[3].ParameterType.IsByRef);
+            MethodInfo sharpCompile = bytecode == null ? null : bytecode.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .FirstOrDefault(m => m.Name == "Compile" && m.GetParameters().Length == 11 && m.GetParameters()[0].ParameterType == typeof(IntPtr) && m.GetParameters()[1].ParameterType == typeof(int));
             bool tagReady = BuildTagger();
 
             string missing = string.Join(", ", new[]
             {
                 add == null ? "particle intake" : null, bind == null ? "resource binding" : null, gather == null ? "frame gather" : null,
                 reload == null || !reload.IsStatic ? "shader reload" : null, compile == null ? "shader compile" : null, open == null ? "include reader" : null,
-                preprocess == null ? "preprocessor" : null, tagReady ? null : "particle layout", PixelBindings.ResolveStage() ? null : "pixel stage"
+                preprocess == null ? "preprocessor" : null, sharpCompile == null ? "native compile call" : null, tagReady ? null : "particle layout", PixelBindings.ResolveStage() ? null : "pixel stage"
             }.Where(n => n != null).ToArray());
             if (missing.Length > 0)
             {
@@ -87,6 +95,8 @@ namespace WaterShading
             harmony.Patch(bind, postfix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(BindPostfix)));
             harmony.Patch(gather, prefix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(GatherPrefix)));
             harmony.Patch(preprocess, prefix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(PreprocessPrefix)), finalizer: new HarmonyMethod(typeof(RenderPerfCompat), nameof(PreprocessFinalizer)));
+            // First in line: on Linux the compatibility layer patches this same call and would otherwise take the original text first.
+            harmony.Patch(sharpCompile, prefix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(CompilePrefix)) { priority = Priority.First }, finalizer: new HarmonyMethod(typeof(RenderPerfCompat), nameof(CompileSourceFinalizer)));
             harmony.Patch(open, postfix: new HarmonyMethod(typeof(RenderPerfCompat), nameof(OpenPostfix)));
             harmony.Patch(compile, finalizer: new HarmonyMethod(typeof(RenderPerfCompat), nameof(CompileFinalizer)));
             installed = true;
@@ -169,16 +179,52 @@ namespace WaterShading
         // (it builds them when it starts, before this plugin can have changed anything).
         public static void GatherPrefix()
         {
-            if (reloaded && !reportedTagged && !disabled && ++framesSinceReload > 120)
+            if (reloaded && !disabled)
             {
-                reportedTagged = true;
-                Log.Write("Render Performance: " + taggedCount + " sea particles marked in the last frame" + (taggedCount == 0 ? " (none: the sea is not being drawn through Render Performance, or its particles are not recognised)" : ""));
+                framesSinceReload++;
+                if (!reportedTagged && framesSinceReload > 120)
+                {
+                    reportedTagged = true;
+                    Log.Write("Render Performance: " + taggedCount + " sea particles marked in the last frame" + (taggedCount == 0 ? " (none: the sea is not being drawn through Render Performance, or its particles are not recognised)" : "") + "; " + RebuildSummary());
+                }
+                else if (!reportedAgain && framesSinceReload > 900)
+                {
+                    reportedAgain = true;
+                    Log.Write("Render Performance: later check; " + RebuildSummary());
+                }
             }
             taggedCount = taggedNow; taggedNow = 0;
             if (reloaded || disabled) return;
             reloaded = true;
             try { reload.Invoke(null, null); Log.Write("asked Render Performance to rebuild its particle shaders"); }
             catch (Exception e) { Notifier.Warn("could not ask Render Performance to rebuild its shaders (" + (e.InnerException ?? e).Message + "); the sea gets no shadows or haze while it is on."); disabled = true; }
+        }
+
+        // What the rebuild did, for the log: our compiles by entry point, failures, and the state of its pixel shader table.
+        static string RebuildSummary()
+        {
+            var sb = new StringBuilder();
+            lock (compiledByEntry) sb.Append("compiled with the changes: ").Append(compileOkCount).Append(" (").Append(string.Join(", ", compiledByEntry.Select(kv => kv.Key + " x" + kv.Value).ToArray())).Append("), failed: ").Append(compileFailCount);
+            try
+            {
+                if (pixelShaders == null) { Type renderer = Log.FindType(RendererType); pixelShaders = renderer == null ? null : AccessTools.Field(renderer, "_pixelShaders"); }
+                var table = pixelShaders == null ? null : pixelShaders.GetValue(null) as Array;
+                if (table == null) sb.Append("; pixel shader table not readable");
+                else
+                {
+                    int total = 0, nulls = 0, disposed = 0;
+                    foreach (object shader in table)
+                    {
+                        total++;
+                        if (shader == null) { nulls++; continue; }
+                        object d = shader.GetType().GetProperty("IsDisposed")?.GetValue(shader, null);
+                        if (d is bool && (bool)d) disposed++;
+                    }
+                    sb.Append("; pixel shader table: ").Append(total).Append(" entries, ").Append(nulls).Append(" empty, ").Append(disposed).Append(" disposed");
+                }
+            }
+            catch (Exception e) { sb.Append("; pixel shader table check failed: ").Append(e.Message); }
+            return sb.ToString();
         }
 
         // ---- shader ----
@@ -202,11 +248,39 @@ namespace WaterShading
 
         public static void PreprocessFinalizer() { inPreprocess = false; }
 
+        // The call that really compiles: Render Performance hands its ORIGINAL text to the compiler here (with its own include handler), arguments by position:
+        // 0 = pointer to the text, 1 = its size in bytes, 7 = the include handler. The text is replaced by the rewritten one for the length of the call.
+        public static void CompilePrefix(ref IntPtr __0, ref int __1, object __7)
+        {
+            if (disabled || __7 == null || __7.GetType() != includeHandlerType || __0 == IntPtr.Zero) return;
+            string text = Marshal.PtrToStringAnsi(__0, __1);
+            string patched = ShaderRewrites.RewriteRenderPerf(text, atmosphereReady);
+            if (patched == text)
+            {
+                if (!reportedShape) { reportedShape = true; Notifier.Warn("Render Performance's particle shader is not shaped the way Water Shading expects (it has changed); the sea gets no shadows or haze while it is on."); }
+                disabled = true;
+                return;
+            }
+            IntPtr pointer = Marshal.StringToHGlobalAnsi(patched);
+            int size = 0;
+            while (Marshal.ReadByte(pointer, size) != 0) size++;
+            rewrittenSource = pointer;
+            __0 = pointer; __1 = size;
+            inCompile = true;
+            ourRewrite = true;
+        }
+
+        public static void CompileSourceFinalizer()
+        {
+            inCompile = false;
+            if (rewrittenSource != IntPtr.Zero) { Marshal.FreeHGlobal(rewrittenSource); rewrittenSource = IntPtr.Zero; }
+        }
+
         // The atmosphere include is read through Render Performance's own include handler; while its particle shader is being preprocessed the include is rewritten
         // (and its constants moved to a slot Render Performance does not use). Arguments by position: 1 = the file name; the result is the stream.
         public static void OpenPostfix(string __1, ref Stream __result)
         {
-            if (!inPreprocess || !atmosphereReady || __result == null || __1 == null || !__1.EndsWith(ShaderRewrites.AtmosphereFile, StringComparison.OrdinalIgnoreCase)) return;
+            if (!(inPreprocess || inCompile) || !atmosphereReady || __result == null || __1 == null || !__1.EndsWith(ShaderRewrites.AtmosphereFile, StringComparison.OrdinalIgnoreCase)) return;
             try
             {
                 string text;
@@ -226,6 +300,11 @@ namespace WaterShading
             ourRewrite = false;
             if (!ours) return __exception;
             string reason = __exception != null ? (__exception.InnerException ?? __exception).Message : __result == null ? "no result" : ResultFailure(__result);
+            lock (compiledByEntry)
+            {
+                if (reason == null) { compileOkCount++; int n; compiledByEntry.TryGetValue(__1 ?? "?", out n); compiledByEntry[__1 ?? "?"] = n + 1; }
+                else compileFailCount++;
+            }
             if (reason == null)
             {
                 if (!reportedWorking) { reportedWorking = true; Log.Write("Render Performance's particle shader compiled with the sea changes"); }
