@@ -147,12 +147,16 @@ namespace WaterShading
                     : "        color.xyz *= lerp(" + floor + ", 1.0f, wsShadow);\r\n") +
                 (atmosphere
                     ? "        float wsDepth = -linearize_depth(input.Position.z, frame_.Environment.projection_matrix);\r\n" +
-                      "        if (Intensity > 0.0001f)\r\n" +
+                      "        // The constants must look like a planet's before the haze is worked out (nothing bound, or something else bound, must never reach the sea).\r\n" +
+                      "        if (Intensity > 0.0001f && PlanetScaleFactor > 0.0f && RadiusAtmosphere > RadiusGround && RadiusGround > 0.0f)\r\n" +
                       "        {\r\n" +
                       "            float4 wsAtmosphere = ComputeAtmosphere(-input.WorldPos, input.WorldPos, frame_.Light.directionalLightVec, wsDepth, 0.5f, " + Settings.AtmosphereSteps.ToString(CultureInfo.InvariantCulture) + ");\r\n" +
+                      "            if (all(isfinite(wsAtmosphere.xyz)))\r\n" +
                       (Settings.AtmosphereDebug == 1
-                          ? "            color = dot(wsAtmosphere.xyz, wsAtmosphere.xyz) > 0 ? float4(wsAtmosphere.xyz * " + F(Settings.AtmosphereStrength) + ", 1.0f) : float4(1, 1, 0, 1);\r\n"
-                          : "            color.xyz += wsAtmosphere.xyz * " + F(Settings.AtmosphereStrength) + " * color.w;\r\n") +
+                          ? "                color = dot(wsAtmosphere.xyz, wsAtmosphere.xyz) > 0 ? float4(wsAtmosphere.xyz * " + F(Settings.AtmosphereStrength) + ", 1.0f) : float4(1, 1, 0, 1);\r\n" +
+                            "            else\r\n" +
+                            "                color = float4(0, 1, 1, 1);\r\n"
+                          : "                color.xyz += wsAtmosphere.xyz * " + F(Settings.AtmosphereStrength) + " * color.w;\r\n") +
                       "        }\r\n" +
                       (Settings.AtmosphereDebug == 1 ? "        else color = float4(1, 0, 1, 1);\r\n" : "")
                     : "") +
