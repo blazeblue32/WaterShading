@@ -29,6 +29,8 @@ namespace ClientPlugin
         // On Linux the compatibility layer's assembly may load after this plugin, so look for it again for a short while.
         public void Update()
         {
+            RenderPerfCompat.Poll(harmony);
+            Notifier.Tick();
             if (done || attempts >= 600) return;
             Try();
             if (!done && attempts == 600) Log.Write("no Linux compatibility compiler found; the plugin does nothing on this setup");

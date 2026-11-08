@@ -11,6 +11,9 @@ namespace WaterShading
         // Brightness of water that sits fully in a shadow, as a fraction of its sunlit brightness (0 = black, 1 = no shadow effect).
         public static float ShadowFloor = 0.30f;
 
+        // Also work with the Render Performance plugin's particle renderer when it is installed.
+        public static bool RenderPerf = true;
+
         // Extra particle material names (comma separated) to treat as sea. Names containing "water" or "foam" are always included.
         public static string ExtraMaterials = "";
 
@@ -44,6 +47,8 @@ namespace WaterShading
                         "# Water Shading settings. Restart the game after changing.\n" +
                         "# ShadowFloor: brightness of water fully in shadow compared with sunlit water (0 black .. 1 no shadow effect).\n" +
                         "ShadowFloor=" + ShadowFloor.ToString(CultureInfo.InvariantCulture) + "\n" +
+                        "# RenderPerf: 1 = also work with the Render Performance plugin's particle renderer when it is installed, 0 = leave it alone.\n" +
+                        "RenderPerf=1\n" +
                         "# ExtraMaterials: comma separated particle material names to treat as sea (names containing water or foam are always included).\n" +
                         "ExtraMaterials=\n" +
                         "# DebugColors: 1 paints water green where the shadow lookup says lit and red where it says shadowed (to check it works), 0 normal.\n" +
@@ -76,6 +81,8 @@ namespace WaterShading
                         AtmosphereSteps = Math.Max(1, Math.Min(8, (int)f));
                     else if (key.Equals("AtmosphereDebug", StringComparison.OrdinalIgnoreCase) && float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out f))
                         AtmosphereDebug = Math.Max(0, Math.Min(2, (int)f));
+                    else if (key.Equals("RenderPerf", StringComparison.OrdinalIgnoreCase))
+                        RenderPerf = !(value == "0" || value.Equals("false", StringComparison.OrdinalIgnoreCase));
                     else if (key.Equals("ExtraMaterials", StringComparison.OrdinalIgnoreCase))
                         ExtraMaterials = value;
                     else if (key.Equals("DebugColors", StringComparison.OrdinalIgnoreCase))

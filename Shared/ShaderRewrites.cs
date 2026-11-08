@@ -19,6 +19,7 @@ namespace WaterShading
         // The game's atmosphere function was written for a full-screen pass: it ends the pixel with clip/discard when the ray is short or misses the
         // atmosphere. In a particle shader that would delete the particle, so those three statements become early returns of "no atmosphere".
         static readonly Regex AtmosphereClip = new Regex(@"clip[ \t]*\([ \t]*depth[ \t]*-[ \t]*ATMOSPHERE_DISTANCE_MIN[ \t]*\)[ \t]*;", RegexOptions.Compiled);
+        static readonly Regex AtmosphereSlot = new Regex(@"(cbuffer[ \t]+AtmosphereConstants[ \t]*:[ \t]*register[ \t]*\([ \t]*)b1([ \t]*\))", RegexOptions.Compiled);
         static readonly Regex AtmosphereDiscard = new Regex(@"\bdiscard[ \t]*;", RegexOptions.Compiled);
 
         // The end of the pixel shader's colour work: lit particles multiply their colour by the light the vertex shader worked out.
@@ -61,12 +62,16 @@ namespace WaterShading
         }
 
         // The game's atmosphere include with its clip/discard statements turned into early returns; the text itself if it does not have that shape.
-        public static string RewriteAtmosphere(string text)
+        // constantsSlot: the constant buffer slot the atmosphere constants are read from (the game's own is 1; Render Performance uses 1 for its own data, so there they move).
+        public static string RewriteAtmosphere(string text, int constantsSlot = 1)
         {
             if (!AtmosphereClip.IsMatch(text) || !AtmosphereDiscard.IsMatch(text)) return text;
+            if (constantsSlot != 1 && !AtmosphereSlot.IsMatch(text)) return text;
             string none = "return float4(0, 0, 0, 1);";
             string result = AtmosphereClip.Replace(text, "if (depth < ATMOSPHERE_DISTANCE_MIN) " + none);
-            return AtmosphereDiscard.Replace(result, none);
+            result = AtmosphereDiscard.Replace(result, none);
+            if (constantsSlot != 1) result = AtmosphereSlot.Replace(result, "${1}b" + constantsSlot.ToString(CultureInfo.InvariantCulture) + "$2");
+            return result;
         }
 
         public static string Rewrite(string fileName, string text, bool withAtmosphere = true)
@@ -111,6 +116,49 @@ namespace WaterShading
 
             string result = LitMultiply.Replace(text, block, 1);
             if (atmosphere) result = FrameInclude.Replace(result, "$1\r\n#include <Transparent/Atmosphere/AtmosphereCommon.hlsli>", 1);
+            return result;
+        }
+
+        // ---- Render Performance's particle shader (its own file, compiled by its own compiler): the same sea block, written for its names. ----
+
+        // Its pixel shader multiplies lit particles by the vertex light just before the OIT output; the sea block goes right after, as in the game's shader.
+        static readonly Regex RpLitMultiply = new Regex(@"(#[ \t]*if[ \t]+defined[ \t]*\([ \t]*LIT_PARTICLE[ \t]*\)[ \t]*\r?\n[ \t]*color\.xyz[ \t]*\*=[ \t]*input\.Light[ \t]*;[ \t]*\r?\n[ \t]*#[ \t]*endif)", RegexOptions.Compiled);
+        static readonly Regex RpLastInclude = new Regex(@"(#[ \t]*include[ \t]*<Transparent/OIT/Globals\.hlsli>)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        // True when the text has the shape this plugin knows how to change (so a change in that plugin shows up as a log line, not a broken shader).
+        public static bool RenderPerfShapeKnown(string text) { return RpLitMultiply.IsMatch(text); }
+
+        // The marker for Render Performance's particles travels in the particle's alpha-cutout value (its data has no alpha-saturation); see RenderPerfCompat.
+        public static string RewriteRenderPerf(string text, bool withAtmosphere)
+        {
+            if (!RpLitMultiply.IsMatch(text)) return text;
+            bool atmosphere = withAtmosphere && RpLastInclude.IsMatch(text);
+            string floor = F(Settings.ShadowFloor), marker = F(WaterMarking.Marker - 1f);
+            string block =
+                "$1\r\n" +
+                "#if !defined(LIT_PARTICLE)\r\n" +
+                "    // Water Shading: particles tagged as sea read the sun shadow map per pixel" + (atmosphere ? " and get the planet's haze" : "") + ".\r\n" +
+                "    if (input.AlphaCutout > " + marker + ")\r\n" +
+                "    {\r\n" +
+                "        float wsShadow = CalculateShadowFast(input.WorldPos);\r\n" +
+                (Settings.DebugColors
+                    ? "        color = float4(lerp(float3(1, 0, 0), float3(0, 1, 0), wsShadow), 1.0f);\r\n"
+                    : "        color.xyz *= lerp(" + floor + ", 1.0f, wsShadow);\r\n") +
+                (atmosphere
+                    ? "        float wsDepth = -linearize_depth(input.Position.z, frame_.Environment.projection_matrix);\r\n" +
+                      "        if (Intensity > 0.0001f)\r\n" +
+                      "        {\r\n" +
+                      "            float4 wsAtmosphere = ComputeAtmosphere(-input.WorldPos, input.WorldPos, frame_.Light.directionalLightVec, wsDepth, 0.5f, " + Settings.AtmosphereSteps.ToString(CultureInfo.InvariantCulture) + ");\r\n" +
+                      (Settings.AtmosphereDebug == 1
+                          ? "            color = dot(wsAtmosphere.xyz, wsAtmosphere.xyz) > 0 ? float4(wsAtmosphere.xyz * " + F(Settings.AtmosphereStrength) + ", 1.0f) : float4(1, 1, 0, 1);\r\n"
+                          : "            color.xyz += wsAtmosphere.xyz * " + F(Settings.AtmosphereStrength) + " * color.w;\r\n") +
+                      "        }\r\n" +
+                      (Settings.AtmosphereDebug == 1 ? "        else color = float4(1, 0, 1, 1);\r\n" : "")
+                    : "") +
+                "    }\r\n" +
+                "#endif";
+            string result = RpLitMultiply.Replace(text, block, 1);
+            if (atmosphere) result = RpLastInclude.Replace(result, "$1\r\n#include <Transparent/Atmosphere/AtmosphereCommon.hlsli>", 1);
             return result;
         }
 

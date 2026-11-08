@@ -5,7 +5,7 @@ nor the planet's atmosphere to those: shadows from mountains, buildings or ships
 This plugin makes the game read the sun shadow map for each pixel of the sea and foam and darken shadowed water, and adds the planet's atmospheric haze to it.
 
 **Status: shadows and atmosphere work on Linux with the LinuxCompat plugin (tested, Render Performance off). Stock Windows, and the game under Wine, use a second way of changing the shader that is written and checked against stand-ins but has not been run on Windows.**
-Not supported: the Render Performance plugin (it replaces the game's particle renderer with its own, so this plugin's changes have no effect while it is on).
+Works with the Render Performance plugin too (see below); that part is checked against stand-ins and a real compile of its shader, and still needs a game test.
 It only changes particles of water materials, so there is nothing to see in worlds without the Water Mod (the shader rebuild and the bindings still happen).
 
 ## Atmosphere
@@ -15,6 +15,15 @@ sea pixel (the ray from the camera to that point) and adds the result to the sea
 the plugin turns the three statements that would delete a particle (a distance clip and two discards) into early returns in the local shader copy. The game's own
 code works out the planet's atmosphere constants for the nearest planet; the plugin uploads them and the density lookup texture for the particle pixel stage.
 As on terrain, nothing is added closer than 1000 m. Settings: `Atmosphere`, `AtmosphereStrength`, `AtmosphereSteps`, `AtmosphereDebug` (below).
+
+## Render Performance
+The Render Performance plugin replaces the game's particle renderer with its own, which draws with its own shader. When it is installed this plugin also works there,
+by reaching into it by name (nothing of it is copied or edited on disk): the sea's particles are marked as they enter its renderer (in the particle's alpha-cutout value, which
+it does not use for the sea), its particle shader's text is changed as its compiler preprocesses it (the same change as for the game's shader; the atmosphere constants
+move to constant buffer slot 6 because it uses slot 1 itself), its resource binding gets the shadow map and the atmosphere constants, and once it is asked to rebuild its shaders.
+It is built so this plugin cannot break Render Performance: every piece it relies on is checked when it is installed; if something is missing or looks different, or the changed
+shader does not compile, Render Performance is given its own shader back, the log gets a `WARNING` line and a notification appears on the HUD
+("Water Shading: ... the sea gets no shadows or haze while it is on"). If Render Performance changes in a way that breaks this, the sea simply looks as before. Turn it off with `RenderPerf=0`.
 
 ## Which particles count as sea
 The plugin tags a particle as sea by its material: the name contains `water` or `foam`, or the name is one of the textures the Water Mod itself offers
@@ -31,6 +40,8 @@ Only the player's own view changes, so every player who wants the effect needs t
     [WaterShading] shadow map bound for the billboard pixel stage
     [WaterShading] particle material treated as sea: <name>
     [WaterShading] atmosphere: planet <id> bound (atmosphere radius ..., intensity ..., lookup found)
+    [WaterShading] Render Performance found; ...                                  (only when it is installed)
+    [WaterShading] Render Performance's particle shader compiled with the sea changes
 
 A line starting `WARNING`, or saying "the game has changed", "not found" or "failed", means a game update moved something the plugin relies on. The plugin then switches the affected part off:
 a problem with the atmosphere leaves the shadows working, a problem with the shadows switches the plugin off, and if that happens after the particle shaders were rebuilt it hands them back to the game's own.
@@ -42,6 +53,7 @@ The first start with the plugin recompiles the particle shaders (a short, one-ti
 | Key | Default | Meaning |
 |---|---|---|
 | `ShadowFloor` | `0.30` | Brightness of water fully in shadow compared with sunlit water (0 = black, 1 = no effect) |
+| `RenderPerf` | `1` | Also work with the Render Performance plugin's particle renderer when it is installed |
 | `ExtraMaterials` | empty | Comma separated particle material names to treat as sea, for water textures the rules above miss |
 | `Atmosphere` | `1` | The sea gets the planet's atmospheric haze like terrain does |
 | `AtmosphereStrength` | `1` | Multiplier on the sea's haze (1 = as strong as on terrain) |
@@ -64,6 +76,7 @@ Which one is used is decided at start: a Linux compatibility compiler present me
 - On stock Windows it also patches the game's shader preprocessing and its include reader (see Platforms).
 - Patches two renderer methods: one adds the shadow map and its sampler (and the atmosphere constants and density lookup) to the particle pixel stage, one tags the sea's particles as they are batched.
 - Writes the nearest planet's atmosphere constants, worked out by the game's own routine, into the game's own atmosphere constant buffer once per particle draw; the game fills that buffer again before each of its own uses.
+- When Render Performance is installed it also patches six of its methods and SharpDX's preprocessor (only for Render Performance's own shader compile); see above.
 - Reads the Water Mod's list of sea textures from its loaded script (read only, optional).
 - No network access, no processes started, no game files changed.
 - Rebuilds the game's particle pixel shaders once, on the first frame that draws particles.

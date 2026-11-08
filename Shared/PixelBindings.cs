@@ -27,12 +27,7 @@ namespace WaterShading
             MethodInfo bind = renderer == null ? null : AccessTools.Method(renderer, "BindResourcesCommon");
             if (bind == null) { Log.Write("billboard resource binding not found; the game has changed, shadows cannot be drawn"); return false; }
 
-            Type context = Log.FindType("VRage.Render11.RenderContext.MyRenderContext");
-            getPixelShader = context == null ? null : AccessTools.PropertyGetter(context, "PixelShader");
-            Type stage = getPixelShader?.ReturnType;
-            setSampler = stage == null ? null : AccessTools.Method(stage, "SetSampler");
-            setSrv = stage == null ? null : AccessTools.Method(stage, "SetSrv");
-            if (getPixelShader == null || setSampler == null || setSrv == null) { Log.Write("pixel stage binding calls not found; the game has changed, shadows cannot be drawn"); return false; }
+            if (!ResolveStage()) return false;
 
             // The renderer builds its billboard pixel shaders once at start-up, which can be before this plugin loads (they then come
             // from the game's precompiled cache and never pass through the redirect). Building them again once the redirect is in place fixes that.
@@ -42,6 +37,19 @@ namespace WaterShading
             if (Settings.Atmosphere) AtmosphereBinding.Resolve();
             if (!WaterMarking.Apply(harmony, renderer)) return false;
             harmony.Patch(bind, postfix: new HarmonyMethod(typeof(PixelBindings), nameof(Postfix)));
+            return true;
+        }
+
+        // The render context's pixel stage calls both particle renderers' bindings go through.
+        public static bool ResolveStage()
+        {
+            if (getPixelShader != null && setSampler != null && setSrv != null) return true;
+            Type context = Log.FindType("VRage.Render11.RenderContext.MyRenderContext");
+            getPixelShader = context == null ? null : AccessTools.PropertyGetter(context, "PixelShader");
+            Type stage = getPixelShader?.ReturnType;
+            setSampler = stage == null ? null : AccessTools.Method(stage, "SetSampler");
+            setSrv = stage == null ? null : AccessTools.Method(stage, "SetSrv");
+            if (getPixelShader == null || setSampler == null || setSrv == null) { Log.Write("pixel stage binding calls not found; the game has changed, shadows cannot be drawn"); return false; }
             return true;
         }
 
@@ -60,13 +68,7 @@ namespace WaterShading
                     RebuildPixelShaders();
                     if (broken) return;
                 }
-                object map = shadowMap();
-                if (map == null) return; // being recreated this instant: keep what is bound from the last call
-                object ps = getPixelShader.Invoke(__0, null);
-                setSampler.Invoke(ps, new object[] { ShadowSamplerSlot, samplerState });
-                setSrv.Invoke(ps, new object[] { ShadowMapSlot, map });
-                if (!reportedBound) { reportedBound = true; Log.Write("shadow map bound for the billboard pixel stage"); }
-                if (ShaderRewrites.AtmosphereReady) AtmosphereBinding.Bind(__0, ps, setSrv);
+                BindResources(__0, AtmosphereBinding.ConstantsSlot, ShaderRewrites.AtmosphereReady);
             }
             catch (Exception e)
             {
@@ -74,6 +76,22 @@ namespace WaterShading
                 Log.Write("binding the shadow map failed, shadows on water are off: " + e);
                 GiveShadersBack();
             }
+        }
+
+        // Binds, for the particle pixel stage of the given context, what the rewritten shader reads: the shadow map and its sampler, and the atmosphere
+        // constants (in the given constant buffer slot) and density lookup. Used for the game's particle renderer and for Render Performance's.
+        // Throws if a call fails; false if the shadow map is not ready.
+        public static bool BindResources(object context, int atmosphereSlot, bool atmosphere)
+        {
+            if (shadowMap == null && !Resolve()) return false;
+            object map = shadowMap();
+            if (map == null) return false; // being recreated this instant: keep what is bound from the last call
+            object ps = getPixelShader.Invoke(context, null);
+            setSampler.Invoke(ps, new object[] { ShadowSamplerSlot, samplerState });
+            setSrv.Invoke(ps, new object[] { ShadowMapSlot, map });
+            if (!reportedBound) { reportedBound = true; Log.Write("shadow map bound for the billboard pixel stage"); }
+            if (atmosphere) AtmosphereBinding.Bind(context, ps, setSrv, atmosphereSlot);
+            return true;
         }
 
         // If the plugin cannot keep its side of the bargain after the particle shaders were rebuilt (the shadow map is no longer bound), those shaders would

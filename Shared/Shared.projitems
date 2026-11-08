@@ -11,7 +11,9 @@
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)AtmosphereBinding.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Log.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Notifier.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PixelBindings.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)RenderPerfCompat.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Settings.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)WaterMarking.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ShaderHook.cs" />

@@ -35,10 +35,15 @@ namespace WaterShading
             if (addBatch == null || dataField == null || saturation == null) { Log.Write("billboard batching not found; the game has changed, shadows cannot be drawn"); return false; }
 
             mark = Build(dataField.FieldType, saturation);
-            extra = (Settings.ExtraMaterials ?? "").Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
-            for (int i = 0; i < extra.Length; i++) extra[i] = extra[i].Trim();
+            LoadExtra();
             harmony.Patch(addBatch, postfix: new HarmonyMethod(typeof(WaterMarking), nameof(Postfix)));
             return true;
+        }
+
+        public static void LoadExtra()
+        {
+            extra = (Settings.ExtraMaterials ?? "").Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < extra.Length; i++) extra[i] = extra[i].Trim();
         }
 
         // Compiles "for i in [start, end): data[i].AlphaSaturation = Marker" for the game's record type.
@@ -89,6 +94,13 @@ namespace WaterShading
         {
             string name;
             if (!names.TryGetValue(material, out name)) names[material] = name = NameOf(material);
+            return IsSeaName(name);
+        }
+
+        // The same rules for a material name on its own (Render Performance's side asks by name).
+        public static bool IsSeaName(string name)
+        {
+            if (name == null) return false;
             bool water = name.IndexOf("water", StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf("foam", StringComparison.OrdinalIgnoreCase) >= 0;
             if (!water) foreach (string e in extra) if (e.Length > 0 && name.Equals(e, StringComparison.OrdinalIgnoreCase)) water = true;
             if (!water)

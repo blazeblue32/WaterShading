@@ -11,7 +11,8 @@ namespace WaterShading
     // lookup texture (texture slot 5). Both are worked out by the game's own code for the nearest planet; the plugin only calls it and uploads the result.
     public static class AtmosphereBinding
     {
-        const int ConstantsSlot = 1, DensityLutSlot = 5;
+        public const int ConstantsSlot = 1; // the game's own slot for these constants
+        const int DensityLutSlot = 5;
 
         public static bool Available;
 
@@ -84,7 +85,7 @@ namespace WaterShading
         // Called on the render thread each time the particle renderer binds its resources: works out the constants for the nearest planet,
         // uploads them into the game's own atmosphere constant buffer (the game maps it again before every use of its own), and binds it
         // and the density lookup for the particle pixel stage. ps is the pixel stage, setSrv its texture-binding method.
-        public static void Bind(object context, object ps, MethodInfo setSrv)
+        public static void Bind(object context, object ps, MethodInfo setSrv, int constantsSlot = ConstantsSlot)
         {
             if (!Available || broken) return;
             try
@@ -123,7 +124,7 @@ namespace WaterShading
                 unmap.Invoke(mapping, null);
 
                 setConstantBuffer = setConstantBuffer ?? AccessTools.Method(ps.GetType(), "SetConstantBuffer");
-                setConstantBuffer.Invoke(ps, new object[] { ConstantsSlot, buffer });
+                setConstantBuffer.Invoke(ps, new object[] { constantsSlot, buffer });
                 if (lut != null) setSrv.Invoke(ps, new object[] { DensityLutSlot, lut });
             }
             catch (Exception e)
