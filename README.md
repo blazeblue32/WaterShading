@@ -8,6 +8,11 @@ This plugin makes the game read the sun shadow map for each pixel of the sea and
 Works with the Render Performance plugin too (see below); tested in game on Linux.
 It only changes particles of water materials, so there is nothing to see in worlds without the Water Mod (the shader rebuild and the bindings still happen).
 
+## Before and after
+| Without the plugin | With the plugin |
+|---|---|
+| ![The sea without the plugin: flat, no shadows](docs/before.jpg) | ![The sea with the plugin: the rocks' shadows fall on the water and the distant sea blends into the haze](docs/after.jpg) |
+
 ## Atmosphere
 The game adds the planet's atmospheric haze to terrain with a screen pass that reads the depth of what is behind each pixel. The sea's particles write no depth, so
 the haze behind them is covered by the water colour and the sea looks pasted over the atmosphere. The plugin makes the game's own atmosphere function run for each
