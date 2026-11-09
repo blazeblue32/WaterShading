@@ -4,7 +4,7 @@ Companion plugin for the Water Mod (Steam Workshop 2200451495). The mod draws th
 nor the planet's atmosphere to those: shadows from mountains, buildings or ships never fall on the water, and the sea looks pasted over the haze.
 This plugin makes the game read the sun shadow map for each pixel of the sea and foam and darken shadowed water, and adds the planet's atmospheric haze to it.
 
-**Status: shadows and atmosphere work on Linux with the LinuxCompat plugin (tested, with and without Render Performance). Stock Windows, and the game under Wine, use a second way of changing the shader that is written and checked against stand-ins and a real compile of the changed shader, but has not been run on Windows.**
+**Status: shadows and atmosphere work on Linux with the LinuxCompat plugin (tested, with and without Render Performance). Stock Windows, and the game under Wine, use a second way of changing the shader that is written and checked against stand-ins and a real compile of the changed shader, but has not been run on native Windows (it has run in the real game under Proton with the Windows build of Pulsar).**
 Works with the Render Performance plugin too (see below); tested in game on Linux.
 It only changes particles of water materials, so there is nothing to see in worlds without the Water Mod (the shader rebuild and the bindings still happen).
 
@@ -34,7 +34,7 @@ shader does not compile, Render Performance is given its own shader back, the lo
 ## Known limits
 - The sea is drawn as two layers (a clear top and a darker one below), and a shadow can show on both, so it can look doubled.
 - Nothing is added to the sea closer than 1000 m, as on terrain.
-- The stock Windows path has not been run on Windows.
+- The stock Windows path has not been run on native Windows. It has run in the real game under Proton with the Windows build of Pulsar (shadows and haze showed).
 
 ## Which particles count as sea
 The plugin tags a particle as sea by its material: the name contains `water` or `foam`, or the name is one of the textures the Water Mod itself offers
@@ -80,7 +80,7 @@ The shader change has to get into the game's shader compile, and that differs by
 | Setup | How |
 |---|---|
 | Linux with the LinuxCompat plugin (tested) | LinuxCompat compiles shaders with a native compiler that reads the shader folder itself, so the plugin makes a local mirror of your own shader folder under `<user data>/Storage/WaterShading/Shaders` (links to your original files plus two rewritten copies) and points only the particle shader compiles at it. It relies on LinuxCompat's class and method names; if they change the plugin logs that and does nothing. |
-| Stock Windows, or the game under Wine (not yet run on Windows) | The game's own compiler reads the files. Its compile reads the particle shader from disk, preprocesses it only to work out the shader cache key, and then compiles the original text, so the plugin changes both steps for that one shader: the preprocessing step runs on a rewritten copy of the text (so the cache key is the changed shader's), and SharpDX's native compile call is given the rewritten copy in place of the original. The game's atmosphere code, with its clip and discards turned into early returns, is pasted into that text instead of being included by name, so the game's own atmosphere shaders keep reading the original file. If the changed shader does not compile, the original is compiled instead, the change is switched off, and a warning is logged and shown on the HUD. Nothing is written to disk. |
+| Stock Windows, or the game under Wine/Proton (run in the real game under Proton; not yet on native Windows) | The game's own compiler reads the files. Its compile reads the particle shader from disk, preprocesses it only to work out the shader cache key, and then compiles the original text, so the plugin changes both steps for that one shader: the preprocessing step runs on a rewritten copy of the text (so the cache key is the changed shader's), and SharpDX's native compile call is given the rewritten copy in place of the original. The game's atmosphere code, with its clip and discards turned into early returns, is pasted into that text instead of being included by name, so the game's own atmosphere shaders keep reading the original file. If the changed shader does not compile, the original is compiled instead, the change is switched off, and a warning is logged and shown on the HUD. Nothing is written to disk. |
 
 Which one is used is decided at start: a Linux compatibility compiler present means the first; Windows (or Wine) means the second; Linux without the compatibility compiler means the plugin does nothing.
 

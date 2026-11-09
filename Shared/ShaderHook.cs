@@ -27,6 +27,10 @@ namespace WaterShading
         [ThreadStatic] static object[] originalArguments;
         [ThreadStatic] static IntPtr swappedSource;
 
+        // Set when the game's own shader was compiled in place of a changed one that failed: the game then stores that result in its shader cache under the changed shader's key,
+        // so the next start would find it there and never try the change (or warn) again. The store is skipped once, so that every start tries again.
+        [ThreadStatic] static bool skipStore;
+
         public static bool Apply(Harmony harmony, string shadersPath)
         {
             gameRoot = Path.GetFullPath(shadersPath).Replace('\\', '/').TrimEnd('/');
@@ -58,6 +62,14 @@ namespace WaterShading
             }
             harmony.Patch(preprocess, prefix: new HarmonyMethod(typeof(ShaderHook), nameof(PreprocessPrefix)));
             harmony.Patch(sharpCompile, prefix: new HarmonyMethod(typeof(ShaderHook), nameof(CompilePrefix)), finalizer: new HarmonyMethod(typeof(ShaderHook), nameof(CompileFinalizer)));
+            try
+            {
+                Type cache = Log.FindType("VRage.Render11.Shader.MyShaderCache");
+                MethodInfo store = cache == null ? null : cache.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                    .FirstOrDefault(m => m.Name == "Store" && m.GetParameters().Length == 4 && m.GetParameters()[0].ParameterType == typeof(string) && m.GetParameters()[2].ParameterType == typeof(byte[]));
+                if (store != null) harmony.Patch(store, prefix: new HarmonyMethod(typeof(ShaderHook), nameof(StorePrefix))); // optional: without it a failed change is simply remembered
+            }
+            catch (Exception e) { Log.Write("could not guard the shader cache against a failed change (continuing without): " + (e.InnerException ?? e).Message); }
             Log.Write("billboard shader will be changed at the game's own compile, from " + gameRoot);
             return true;
         }
@@ -112,6 +124,7 @@ namespace WaterShading
         // text here; for the particle shader it is replaced by the changed text for the length of the call.
         public static void CompilePrefix(ref IntPtr __0, ref int __1, string __2, string __3, object __4, object __5, object __6, object __7, string __8, object __9, object __10)
         {
+            skipStore = false;
             if (Disabled || __0 == IntPtr.Zero || __1 <= 0 || __7 == null || __7.GetType() != includeType || __8 == null) return;
             try
             {
@@ -129,12 +142,19 @@ namespace WaterShading
                 originalArguments = new object[] { __0, __1, __2, __3, __4, __5, __6, __7, __8, __9, __10 };
                 swappedSource = pointer;
                 __0 = pointer; __1 = changed.Length;
-                if (!reportedCompile) { reportedCompile = true; Log.Write("billboard shader compiled from the changed text"); }
             }
             catch (Exception e)
             {
                 Log.Write("changing the billboard shader's text for the compile failed, it is left as the game draws it: " + (e.InnerException ?? e).Message);
             }
+        }
+
+        // The game's shader cache store: skipped once right after a changed shader failed and the game's own was compiled instead.
+        public static bool StorePrefix()
+        {
+            if (!skipStore) return true;
+            skipStore = false;
+            return false;
         }
 
         // Frees the changed text; if the changed shader did not compile, compiles the game's original text instead (so the game is never left without its particle shader),
@@ -148,10 +168,14 @@ namespace WaterShading
             try
             {
                 string reason = __exception != null ? (__exception.InnerException ?? __exception).Message : __result == null ? "no result" : RenderPerfCompat.ResultFailure(__result);
-                if (reason == null) return __exception;
+                if (reason == null)
+                {
+                    if (!reportedCompile) { reportedCompile = true; Log.Write("billboard shader compiled from the changed text"); }
+                    return __exception;
+                }
                 Disabled = true;
                 if (!warnedCompile) { warnedCompile = true; Notifier.Warn("the particle shader did not compile with Water Shading's changes (" + reason + "); it was given the game's own shader back and the sea gets no shadows or haze."); }
-                try { __result = sharpCompile.Invoke(null, args); return null; }
+                try { __result = sharpCompile.Invoke(null, args); skipStore = true; return null; }
                 catch (TargetInvocationException e) { return e.InnerException ?? e; }
             }
             finally { Marshal.FreeHGlobal(pointer); }
