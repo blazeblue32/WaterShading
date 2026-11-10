@@ -67,7 +67,8 @@ namespace WaterShading
                 Type cache = Log.FindType("VRage.Render11.Shader.MyShaderCache");
                 MethodInfo store = cache == null ? null : cache.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
                     .FirstOrDefault(m => m.Name == "Store" && m.GetParameters().Length == 4 && m.GetParameters()[0].ParameterType == typeof(string) && m.GetParameters()[2].ParameterType == typeof(byte[]));
-                if (store != null) harmony.Patch(store, prefix: new HarmonyMethod(typeof(ShaderHook), nameof(StorePrefix))); // optional: without it a failed change is simply remembered
+                if (store != null) harmony.Patch(store, prefix: new HarmonyMethod(typeof(ShaderHook), nameof(StorePrefix)));
+                else Log.Write("the game's shader cache store was not found (continuing without): if the changed shader ever fails, the game's own shader is remembered in its cache for the next start"); // optional guard
             }
             catch (Exception e) { Log.Write("could not guard the shader cache against a failed change (continuing without): " + (e.InnerException ?? e).Message); }
             Log.Write("billboard shader will be changed at the game's own compile, from " + gameRoot);
